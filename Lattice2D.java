@@ -7,7 +7,7 @@ import java.util.function.Function;
 
 import javax.imageio.ImageIO;
 import java.io.File;
-
+import java.io.FileWriter;
 import java.util.ArrayList;
 import java.time.Instant;
 import java.awt.image.BufferedImage;
@@ -229,6 +229,69 @@ public class Lattice2D {
             } catch (Exception ex) {
                 ex.printStackTrace();
             }
+        }
+
+        public void genCSV(String fname) {
+            try {
+                FileWriter csvWriter = new FileWriter(fname + ".csv");
+                csvWriter.append("Path Length:");
+                csvWriter.append(",");
+                csvWriter.append(Double.toString(pathLen));
+                csvWriter.append("\n");
+
+                /*csvWriter.append("Path X");
+                for (int[] pos : path) {
+                    csvWriter.append(",");
+                    csvWriter.append(Integer.toString(pos[0]));
+                }
+                csvWriter.append("\n");
+
+                csvWriter.append("Path Y:");
+                for (int[] pos : path) {
+                    csvWriter.append(",");
+                    csvWriter.append(Integer.toString(pos[1]));
+                }
+                csvWriter.append("\n");*/
+
+                csvWriter.append("Left Depth:");
+                for (Double depth : leftDepths) {
+                    csvWriter.append(",");
+                    csvWriter.append(Double.toString(depth));
+                }
+                csvWriter.append("\n");
+
+                csvWriter.append("Left Nodes Expanded:");
+                for (Integer ne : leftExpanded) {
+                    csvWriter.append(",");
+                    csvWriter.append(Integer.toString(ne));
+                }
+                csvWriter.append("\n");
+            
+                csvWriter.append("Right Depth:");
+                for (Double depth : rightDepths) {
+                    csvWriter.append(",");
+                    csvWriter.append(Double.toString(depth));
+                }
+                csvWriter.append("\n");
+
+                csvWriter.append("Right Nodes Expanded:");
+                for (Integer ne : rightExpanded) {
+                    csvWriter.append(",");
+                    csvWriter.append(Integer.toString(ne));
+                }
+                csvWriter.append("\n");
+
+                csvWriter.flush();
+                csvWriter.close();
+            } catch (Exception ex) {}
+        }
+
+        public void genFolder(String folderName) {
+            try {
+                new File(folderName).mkdirs();
+                genCSV(folderName + "/Data");
+                genImage(folderName + "/Image");
+            } catch (Exception ex) {}
         }
 
     }
@@ -775,11 +838,11 @@ public class Lattice2D {
         System.out.println("Mono: ");
         SearchResults monoRes = test.solve(hMH, null, Lattice2D.SEARCH_TYPE_AS);
         System.out.println(monoRes);
-        monoRes.genImage("MONO");
+        monoRes.genFolder("OUTPUT/MONO");
         System.out.println("Bi: ");
         SearchResults biRes = test.solve(hMH, hMH, Lattice2D.SEARCH_TYPE_BDAS);
         System.out.println(biRes);
-        biRes.genImage("BI");
+        biRes.genFolder("OUTPUT/BI");
     }
 
 }

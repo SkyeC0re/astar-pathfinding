@@ -66,17 +66,32 @@ public class Lattice2D {
         public double pathLen;
         public ArrayList<Double> leftDepths = null;
         public ArrayList<Double> rightDepths = null;
-        public ArrayList<Long> leftExpanded = null;
-        public ArrayList<Long> rightExpanded = null;
+        public ArrayList<Long> leftExplored = null;
+        public ArrayList<Long> rightExplored = null;
         public ArrayList<Long> timeTaken = null;
         public int minX = Integer.MAX_VALUE, maxX = Integer.MIN_VALUE, minY = Integer.MAX_VALUE, maxY = Integer.MIN_VALUE;
         public BufferedImage img;
-        public long totalExpand = 0;
+        public long totalExplore = 0;
         public long totalTime = 0;
 
-
+        /**
+         * Initializes the class and stores all the search data.
+         * 
+         * @param probe The relevant probe function.
+         * @param start The start position(s).
+         * @param end The possible end position(s).
+         * @param path The optimal path between any start and end position, null if non-existant.
+         * @param pathLen The length of the optimal path.
+         * @param leftClosed All the explored nodes starting from the start positions.
+         * @param rightClosed All the explored nodes starting from the end positions.
+         * @param leftDepths The f values of the left depths.
+         * @param rightDepths The f values of the right depths.
+         * @param leftExplored The total nodes explored from the start positions at each left depth.
+         * @param rightExplored The total noded explored from the end positions at each right depth.
+         * @param timeTaken The time taken (in milliseconds) for each depth search.
+         */
         public SearchResults(Function<int[], Boolean> probe, int[][] start, int[][] end, LinkedList<int[]> path, double pathLen, HashMap<Long, Node> leftClosed, HashMap<Long, Node> rightClosed,
-                            ArrayList<Double> leftDepths, ArrayList<Double> rightDepths, ArrayList<Long> leftExpanded, ArrayList<Long> rightExpanded, ArrayList<Long> timeTaken) {
+                            ArrayList<Double> leftDepths, ArrayList<Double> rightDepths, ArrayList<Long> leftExplored, ArrayList<Long> rightExplored, ArrayList<Long> timeTaken) {
             this.probe = probe;
             this.start = start;
             this.end = end;
@@ -84,15 +99,15 @@ public class Lattice2D {
             this.pathLen = pathLen;
             this.leftDepths = leftDepths;
             this.rightDepths = rightDepths;
-            this.leftExpanded = leftExpanded;
-            this.rightExpanded = rightExpanded;
+            this.leftExplored = leftExplored;
+            this.rightExplored = rightExplored;
             this.timeTaken = timeTaken;
 
-            for (long expand : leftExpanded) {
-                totalExpand += expand;
+            for (long explored : leftExplored) {
+                totalExplore += explored;
             }
-            for (long expand : rightExpanded) {
-                totalExpand += expand;
+            for (long explored : rightExplored) {
+                totalExplore += explored;
             }
             for (long timeMilli : timeTaken) {
                 totalTime += timeMilli;
@@ -193,10 +208,10 @@ public class Lattice2D {
                 }
             }
 
-            minX-=10;
-            minY-=10;
-            maxX+=10;
-            maxY+=10;
+            minX-=5;
+            minY-=5;
+            maxX+=5;
+            maxY+=5;
 
 
             int diffX = maxX - minX + 1;
@@ -258,25 +273,35 @@ public class Lattice2D {
             }
         }
 
+        /**
+         * Generates a .csv file with all relevant search information.
+         *
+         * @param fname the name of the file to save the output data to.
+         */
         public void genCSV(String fname) {
             try {
                 FileWriter csvWriter = new FileWriter(fname + ".csv");
 
-                csvWriter.append("Basic Info Labels:, Basic Info: , , Path X, Path Y, , Left Depth, Left Nodes Expanded, Right Depth, Right Nodes Expanded,Time Taken (ms)\n");
+                csvWriter.append("Basic Info Labels:, Basic Info: , , Path X, Path Y, , Left Depth, Left Nodes Explored, Right Depth, Right Nodes Explored,Time Taken (ms)\n");
                 int i = 0;
                 boolean tryNext = true;
                 int [] pos;
                 while(tryNext) {
                     tryNext = false;
                     if (i == 0) {
-                        csvWriter.append("Total Nodes Expanded:, ");
-                        csvWriter.append(Long.toString(totalExpand));
+                        csvWriter.append("Total Nodes Explored:, ");
+                        csvWriter.append(Long.toString(totalExplore));
                         csvWriter.append(",");
                         tryNext = true;
 
                     } else if (i == 1) {
                         csvWriter.append("Total Time Taken (ms):,");
                         csvWriter.append(Long.toString(totalTime));
+                        csvWriter.append(",");
+                        tryNext = true;
+                    } else if (i == 2) {
+                        csvWriter.append("Optimal Path Length:,");
+                        csvWriter.append(Double.toString(pathLen));
                         csvWriter.append(",");
                         tryNext = true;
                     } else {
@@ -300,7 +325,7 @@ public class Lattice2D {
                     if (i < leftDepths.size()) {
                         csvWriter.append(Double.toString(leftDepths.get(i)));
                         csvWriter.append(",");
-                        csvWriter.append(Long.toString(leftExpanded.get(i)));
+                        csvWriter.append(Long.toString(leftExplored.get(i)));
                         csvWriter.append(",");
                         tryNext = true;
                     } else {
@@ -310,7 +335,7 @@ public class Lattice2D {
                     if (i < rightDepths.size()) {
                         csvWriter.append(Double.toString(rightDepths.get(i)));
                         csvWriter.append(",");
-                        csvWriter.append(Long.toString(rightExpanded.get(i)));
+                        csvWriter.append(Long.toString(rightExplored.get(i)));
                         csvWriter.append(",");
                         tryNext = true;
                     } else {
@@ -562,14 +587,14 @@ public class Lattice2D {
 
         Queue<Node> leftOpen, rightOpen;
         double pathLen = Double.POSITIVE_INFINITY;
-        long leftExpand = 0, rightExpand = 0;
+        long leftExplore = 0, rightExplore = 0;
         Node middleFromLeft = null, middleFromRight = null;
         HashMap<Long, Node> leftClosed = new HashMap<Long, Node>();
         HashMap<Long, Node> rightClosed = new HashMap<Long, Node>();
         ArrayList<Double> leftDepths = new ArrayList<Double>();
         ArrayList<Double> rightDepths = new ArrayList<Double>();
-        ArrayList<Long> leftExpanded = new ArrayList<Long>();
-        ArrayList<Long> rightExpanded = new ArrayList<Long>();
+        ArrayList<Long> leftExplored = new ArrayList<Long>();
+        ArrayList<Long> rightExplored = new ArrayList<Long>();
         ArrayList<Long> timeTaken = new ArrayList<Long>();
 
         Node workingNode;
@@ -626,15 +651,15 @@ public class Lattice2D {
 
                     if (!rightClosed.isEmpty()) {
                         leftDepths.add(leftCurrDepth);
-                        leftExpanded.add(leftExpand);
+                        leftExplored.add(leftExplore);
                         long millTime = Duration.between(depthStart, Instant.now()).toMillis();
                         timeTaken.add(millTime);
-                        System.out.println("Depth: " + leftCurrDepth + " || Expanded: " + leftExpand + " || Time(ms): " + millTime);
+                        System.out.println("Depth: " + leftCurrDepth + " || Explored: " + leftExplore + " || Time(ms): " + millTime);
                     } 
                     leftClosed.clear();
                     leftOpen.clear();
 
-                    leftExpand = 0;
+                    leftExplore = 0;
                     leftCurrDepth = leftNextDepth;
                     leftNextDepth = Double.POSITIVE_INFINITY;
                     
@@ -644,6 +669,7 @@ public class Lattice2D {
                             newNode = new Node(null, pos, 0, h1.apply(probe, pos, null, end));
                             leftOpen.add(newNode);
                             leftClosed.put(newNode.getLongPos(), newNode);
+                            leftExplore++;
                         }
                     }
                     
@@ -660,6 +686,7 @@ public class Lattice2D {
                                     break;
                                 }
                                 rightClosed.put(newNode.getLongPos(), newNode);
+                                rightExplore++;
                             }
                         }
                         if (!run) {
@@ -676,9 +703,8 @@ public class Lattice2D {
                     allEmpty = true;
                 } else if ((checkNode = leftClosed.get(workingNode.getLongPos())) != null && workingNode == checkNode) {
                     leftClosed.remove(workingNode.getLongPos());
-                    leftExpand++;
                     for (Node newNode : genValidNeighbours(workingNode, probe, h1, end, leftClosed, rightClosed, false)) {
-                        if (newNode.gVal + newNode.hVal <= leftCurrDepth) {
+                        if (newNode.gVal + Math.ceil(newNode.hVal) <= leftCurrDepth) {
                             if ((checkNode = rightClosed.get(newNode.getLongPos())) != null) {
                                 if (newNode.gVal < pathLen) {
                                     pathLen = newNode.gVal;
@@ -691,8 +717,9 @@ public class Lattice2D {
                             } else {
                                 leftOpen.add(newNode);
                                 leftClosed.put(newNode.getLongPos(), newNode);
+                                leftExplore++;
                             }
-                        } else if (newNode.gVal + newNode.hVal < leftNextDepth) {
+                        } else if (newNode.gVal + Math.ceil(newNode.hVal) < leftNextDepth) {
                             leftNextDepth = newNode.gVal + newNode.hVal;
                         }
                     }
@@ -704,7 +731,7 @@ public class Lattice2D {
             }
 
             leftDepths.add(leftCurrDepth);
-            leftExpanded.add(leftExpand);
+            leftExplored.add(leftExplore);
         
         // Graph Searches
         } else if (searchType == SEARCH_TYPE_AS || searchType == SEARCH_TYPE_BDAS) {
@@ -722,6 +749,7 @@ public class Lattice2D {
                     Node newNode = new Node(null, pos, 0, h1.apply(probe, pos, null , end));
                     leftOpen.add(newNode);
                     leftClosed.put(newNode.getLongPos(), newNode);
+                    leftExplore++;
                 }
             }
             
@@ -745,6 +773,7 @@ public class Lattice2D {
                         rightOpen.add(newNode);
                     }
                     rightClosed.put(newNode.getLongPos(), newNode);
+                    rightExplore++;
                 }
             }
             allEmpty = false;
@@ -759,9 +788,9 @@ public class Lattice2D {
                     allEmpty = true;
                 } else if (workingNode.gVal + workingNode.hVal < pathLen) {
                     if ((checkNode = leftClosed.get(workingNode.getLongPos())) != null && workingNode == checkNode) {
-                        leftExpand++;
+                        
                         for (Node newNode : genValidNeighbours(workingNode, probe, h1, end, leftClosed, rightClosed, leftOnlyRefine)) {  
-                            if (newNode.gVal + newNode.hVal < pathLen) {
+                            if (newNode.gVal + Math.ceil(newNode.hVal) < pathLen) {
                                 if ((checkNode = rightClosed.get(newNode.getLongPos())) != null) {
                                     if (newNode.gVal + checkNode.gVal < pathLen) {
                                         pathLen = newNode.gVal + checkNode.gVal;
@@ -775,6 +804,7 @@ public class Lattice2D {
                                     do {
                                         leftClosed.put(newNode.getLongPos(), newNode);
                                         newNode = newNode.parent;
+                                        leftExplore++;
                                     } while (newNode != workingNode);
                                 }
                                 
@@ -795,10 +825,10 @@ public class Lattice2D {
                         }
                     } else if (workingNode.gVal + workingNode.hVal < pathLen) {
                         if ((checkNode = rightClosed.get(workingNode.getLongPos())) != null && workingNode == checkNode) {
-                            rightExpand++;
+                            
                             for (Node newNode : genValidNeighbours(workingNode, probe, h2, start, rightClosed, leftClosed, rightOnlyRefine)) {
                                 
-                                if (newNode.gVal + newNode.hVal < pathLen) {
+                                if (newNode.gVal + Math.ceil(newNode.hVal) < pathLen) {
                                     if ((checkNode = leftClosed.get(newNode.getLongPos())) != null) {
                                         if (newNode.gVal + checkNode.gVal < pathLen) {
                                             pathLen = newNode.gVal + checkNode.gVal;
@@ -812,6 +842,7 @@ public class Lattice2D {
                                         do {
                                             rightClosed.put(newNode.getLongPos(), newNode);
                                             newNode = newNode.parent;
+                                            rightExplore++;
                                         } while (newNode != workingNode);
                                     }
                                     
@@ -829,10 +860,10 @@ public class Lattice2D {
             timeTaken.add(Duration.between(startTime, finishTime).toMillis());
 
             leftDepths.add(Double.POSITIVE_INFINITY);
-            leftExpanded.add(leftExpand);
+            leftExplored.add(leftExplore);
             if (searchType == SEARCH_TYPE_BDAS) {
                 rightDepths.add(Double.POSITIVE_INFINITY);
-                rightExpanded.add(rightExpand);
+                rightExplored.add(rightExplore);
             }
         }
 
@@ -857,11 +888,14 @@ public class Lattice2D {
             path = null;
         }
         
-        ret = new SearchResults(probe, start, end, path, pathLen, leftClosed, rightClosed, leftDepths, rightDepths, leftExpanded, rightExpanded, timeTaken);
-        System.out.println("Search Completed: Total Nodes Expanded: " + ret.totalExpand + " || Time(ms): " + ret.totalTime);
+        ret = new SearchResults(probe, start, end, path, pathLen, leftClosed, rightClosed, leftDepths, rightDepths, leftExplored, rightExplored, timeTaken);
+        System.out.println("Search Completed: Optimal Path Length: " + Double.toString(pathLen) + " || Total Nodes Explored: " + ret.totalExplore + " || Time(ms): " + ret.totalTime);
         return ret;
     }
 
+    /**
+     * Straight Line Hueristic Function
+     */
     public static Function4<Function<int[], Boolean>, int[], Node, int[][], Double> hSLD = (probe, pos, parent, end) -> {
         if (end.length < 1) {
             return Double.POSITIVE_INFINITY;
@@ -876,20 +910,53 @@ public class Lattice2D {
         return min;
     };
 
+    /**
+     * Manhattan Heuristic Function
+     */
     public static Function4<Function<int[], Boolean>, int[], Node, int[][], Double> hMH = (probe, pos, parent, end) -> {
-        if (end.length < 1) {
-            return Double.POSITIVE_INFINITY;
-        }
 
-        double min = Math.abs(pos[0] - end[0][0]) + Math.abs(pos[1] - end[0][1]);
+        double min = Double.POSITIVE_INFINITY;
 
-        for (int i = 1; i < end.length; i++) {
-            min = Math.min(min, Math.abs(pos[0] - end[i][0]) + Math.abs(pos[1] - end[i][1]));
+        for (int[]  endPos : end) {
+            min = Math.min(min, Math.abs(pos[0] - endPos[0]) + Math.abs(pos[1] - endPos[1]));
         }
 
         return min;
     };
 
+    /**
+     * Manhattan Heuristic Function (Preferring equal decrease in x and y)
+     */
+    public static Function4<Function<int[], Boolean>, int[], Node, int[][], Double> hMHEq = (probe, pos, parent, end) -> {
+       
+
+        double ret = Double.POSITIVE_INFINITY;
+        double curr;
+        int xDiff, yDiff, max, min;
+        for (int[] endPos : end) {
+            xDiff = Math.abs(pos[0] - endPos[0]);
+            yDiff = Math.abs(pos[1] - endPos[1]);
+            curr = xDiff + yDiff;
+            if (xDiff > yDiff) {
+                max = xDiff;
+                min = yDiff;
+            } else {
+                max = yDiff;
+                min = xDiff;
+            }
+            if (max < 1.5*min || curr < 3.0) {
+                curr -= 0.5;
+            }
+
+            ret = Math.min(ret, curr);
+        }
+
+        return ret;
+    };
+
+    /**
+     * Class used to store a Manhattan hueristic function with pruning.
+     */
     public static class MHBUG {
         int [] parity = new int[2];
         int[][] scanMin = new int[2][2];
@@ -924,7 +991,7 @@ public class Lattice2D {
                     /*System.out.println("BARRIER START: [" + scanMin[0][0] + ", " + scanMin[0][1] + "]");
                     System.out.println("PARITY: [" + parity[0] + ", " + parity[1] + "]");
                     System.out.println("LOOKING FOR: ["  + scanMin[1][0] + ", " + scanMin[1][1] + "]");*/
-                    int count = 0, max = (scanDist[0] + scanDist[1] - 2) * 6;
+                    int count = 0, max = (scanDist[0] + scanDist[1] - 2) * 8;
                     if (count < max) {
                         int tempQuad;
                         int[] windingNumbers = new int[end.length];
@@ -1017,7 +1084,9 @@ public class Lattice2D {
         };
     }
     
-
+     /**
+     * Breadth-First Search Hueristic Function
+     */
     public static Function4<Function<int[], Boolean>, int[], Node, int[][], Double> hBFS = (probe, pos, parent, end) -> {
         for (int[] endPos : end) {
             if (endPos[0] == pos[0] && endPos[1] == pos[1]) {
@@ -1028,10 +1097,19 @@ public class Lattice2D {
         return 1.0;
     };
 
+     /**
+     * Uniform Cost Hueristic Function (For Djikstra and Depth-First Iterative Deepening)
+     */
     public static Function4<Function<int[], Boolean>, int[], Node, int[][], Double> hNULL = (probe, pos, parent, end) -> {
        return 0.0;
     };
 
+    /**
+     * 
+     * @param centre The position to be treated as the origin.
+     * @param arm The position for which we want to get the relative quadrant with regards to the centre.
+     * @return The relative quadrant (labelled as 0 for non-negative x and y, going clockwise up to 3).
+     */
     public static int getRelativeQuad (int [] centre, int[] arm) {
         if (arm[0] < centre[0]) {
             if (arm[1] < centre[1]) {
@@ -1048,6 +1126,12 @@ public class Lattice2D {
         }
     }
 
+    /**
+     * 
+     * @param prevQuad The previous relative quad between a centre and an arm.
+     * @param nextQuad The relative quad between the same centre and a new arm.
+     * @return The change in quadrants.
+     */
     public static int getQuadJump (int prevQuad, int nextQuad) {
         int val = nextQuad - prevQuad;
         if (val == 0) {
@@ -1061,6 +1145,12 @@ public class Lattice2D {
         }
     }
 
+    /**
+     * Change a direction a number of 1/8 full rotations clockwise.
+     * 
+     * @param parity A position that represents one of the eight directions around any square (e.g. on top of the square is [0, 1])
+     * @param amount The amount of 1/8 full rotations to turn clockwise.
+     */
     public static void clockwise(int[] parity, int amount) {
         int prod;
         for (int i = 0; i < amount; i++) {
@@ -1078,6 +1168,12 @@ public class Lattice2D {
 
     }
 
+     /**
+     * Change a direction a number of 1/8 full rotations counter-clockwise.
+     * 
+     * @param parity A position that represents one of the eight directions around any square (e.g. on top of the square is [0, 1])
+     * @param amount The amount of 1/8 full rotations to turn counter-clockwise.
+     */
     public static void counterClockwise(int[] parity, int amount) {
         int prod;
         for (int i = 0; i < amount; i++) {
@@ -1094,6 +1190,11 @@ public class Lattice2D {
         }
     }
 
+    /**
+     * Inverts a direction.
+     * 
+     * @param parity A position that represents one of the eight directions around any square (e.g. on top of the square is [0, 1])
+     */
     public static void parityInvert(int[] parity) {
         parity[0] = -parity[0];
         parity[1] = -parity[1];
@@ -1103,11 +1204,6 @@ public class Lattice2D {
         int[][] start = {{31, 44}};
         int[][] end = {{44, 11}};
         boolean[][] board = new boolean[1200][1200];
-        for (boolean[] row : board) {
-            for (int col = 0; col < row.length; col++) {
-                row[col] = false;
-            }
-        }
 
         OpenSimplexNoise A = new OpenSimplexNoise(99l);
         

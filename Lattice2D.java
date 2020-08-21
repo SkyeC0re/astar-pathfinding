@@ -208,10 +208,10 @@ public class Lattice2D {
                 }
             }
 
-            minX-=5;
-            minY-=5;
-            maxX+=5;
-            maxY+=5;
+            minX-=10;
+            minY-=10;
+            maxX+=10;
+            maxY+=10;
 
 
             int diffX = maxX - minX + 1;
@@ -238,11 +238,15 @@ public class Lattice2D {
                         
                     }
                 }
-                if (path != null) {
-                    for (int[] pathPos : path) {
-                        img.setRGB(pathPos[0] - minX, pathPos[1] - minY, 0xFFFF0000);
+                
+                    if (path != null) {
+                        for (int[] pathPos : path) {
+                            try {
+                                img.setRGB(pathPos[0] - minX, pathPos[1] - minY, 0xFFFF0000);
+                            } catch (Exception ex) {}
+                        }
                     }
-                }
+                
 
                 this.img = img;
             } catch (Exception ex) {
@@ -450,22 +454,24 @@ public class Lattice2D {
                     if ((((checkNode = selfClosed.get(getLongPos(pos))) != null) && (checkNode.gVal <= node.gVal + 1.0)) || (onlyRefine && checkNode == null)) {
                         continue;
                     }
+
                     tempH = h.apply(probe, pos, node, dest);
                     if (tempH != Double.POSITIVE_INFINITY) {
                         neighbours.add(new Node(node, pos, node.gVal + 1.0, tempH));
+                        
                     }
                     
                 }
             }
 
             counter++;
-            if (probeCount == 3 && neighbours.size() == 1) {
+            /*if (probeCount == 3 && neighbours.size() == 1) {
                 node = neighbours.peek();
                 if (otherClosed.get(node.getLongPos()) != null) {
                     break;
                 }
                 continue;
-            }
+            }*/
             break;
             
         }
@@ -619,11 +625,10 @@ public class Lattice2D {
 
         run = oneStart && oneEnd;
 
-        //Tree Iterative Deepening Searches
+        //Iterative Deepening Searches
         if (searchType == SEARCH_TYPE_DFID || searchType == SEARCH_TYPE_ASID) {
             double leftCurrDepth = -1.0, leftNextDepth;
             leftNextDepth = 0.0;
-            
             if (searchType == SEARCH_TYPE_DFID) {
                 System.out.println("Running Depth First Iterative Deepening Search:");
                 leftOpen = new LIFOQueue<Node>();
@@ -733,7 +738,7 @@ public class Lattice2D {
             leftDepths.add(leftCurrDepth);
             leftExplored.add(leftExplore);
         
-        // Graph Searches
+        // Tree-Graph Searches
         } else if (searchType == SEARCH_TYPE_AS || searchType == SEARCH_TYPE_BDAS) {
             if (searchType == SEARCH_TYPE_AS) {
                 System.out.println("Running A*:");
@@ -786,7 +791,7 @@ public class Lattice2D {
                         break;
                     }
                     allEmpty = true;
-                } else if (workingNode.gVal + workingNode.hVal < pathLen) {
+                } else if (workingNode.gVal + Math.ceil(workingNode.hVal) < pathLen) {
                     if ((checkNode = leftClosed.get(workingNode.getLongPos())) != null && workingNode == checkNode) {
                         
                         for (Node newNode : genValidNeighbours(workingNode, probe, h1, end, leftClosed, rightClosed, leftOnlyRefine)) {  
@@ -823,7 +828,7 @@ public class Lattice2D {
                         if (pathLen == Double.POSITIVE_INFINITY) {
                             break;
                         }
-                    } else if (workingNode.gVal + workingNode.hVal < pathLen) {
+                    } else if (workingNode.gVal + Math.ceil(workingNode.hVal) < pathLen) {
                         if ((checkNode = rightClosed.get(workingNode.getLongPos())) != null && workingNode == checkNode) {
                             
                             for (Node newNode : genValidNeighbours(workingNode, probe, h2, start, rightClosed, leftClosed, rightOnlyRefine)) {
@@ -883,13 +888,12 @@ public class Lattice2D {
                 path.addLast(middleFromRight.pos);
                 middleFromRight = middleFromRight.parent;
             }
-            
         } else {
             path = null;
         }
         
         ret = new SearchResults(probe, start, end, path, pathLen, leftClosed, rightClosed, leftDepths, rightDepths, leftExplored, rightExplored, timeTaken);
-        System.out.println("Search Completed: Optimal Path Length: " + Double.toString(pathLen) + " || Total Nodes Explored: " + ret.totalExplore + " || Time(ms): " + ret.totalTime);
+        System.out.println("Search Completed: Optimal Path Length: " + Double.toString(pathLen) + " || Total Nodes Explored: " + ret.totalExplore + " || Time(ms): " + ret.totalTime + "\n");
         return ret;
     }
 
@@ -932,21 +936,12 @@ public class Lattice2D {
 
         double ret = Double.POSITIVE_INFINITY;
         double curr;
-        int xDiff, yDiff, max, min;
+        int xDiff, yDiff, sum;
         for (int[] endPos : end) {
             xDiff = Math.abs(pos[0] - endPos[0]);
             yDiff = Math.abs(pos[1] - endPos[1]);
-            curr = xDiff + yDiff;
-            if (xDiff > yDiff) {
-                max = xDiff;
-                min = yDiff;
-            } else {
-                max = yDiff;
-                min = xDiff;
-            }
-            if (max < 1.5*min || curr < 3.0) {
-                curr -= 0.5;
-            }
+            sum = xDiff + yDiff;
+            curr = sum - ((sum*sum)>>>2) / (xDiff * xDiff + yDiff * yDiff + 1.0);
 
             ret = Math.min(ret, curr);
         }
@@ -955,134 +950,156 @@ public class Lattice2D {
     };
 
     /**
-     * Class used to store a Manhattan hueristic function with pruning.
+     * A modified Manhattan Distance Function that attempts to evade nooks and crannies.
      */
-    public static class MHBUG {
-        int [] parity = new int[2];
-        int[][] scanMin = new int[2][2];
-        int[] scanDist = new int[2];
-        
+    public static Function4<Function<int[], Boolean>, int[], Node, int[][], Double> hMHNook = (probe, pos, parent, end) -> {
+            
+        if (parent != null) {
+            int[][] scanMin = new int[2][2];
+            int[] ppos = parent.pos;
+            int[] parity = pos.clone();
+            parity[0] -= ppos[0];
+            parity[1] -= ppos[1];
+            
+            /*int[] lookout = pos.clone();
+            for (int i = 0; i < 5; i++) {
+                lookout[0] += parity[0];
+                lookout[1] += parity[1];
 
-        public Function4<Function<int[], Boolean>, int[], Node, int[][], Double> h = (probe, pos, parent, end) -> {
-            if (parent != null) {
-                scanDist[0] = 0;
-                scanDist[1] = 0;
-                parity[0] = pos[0] - parent.pos[0];
-                parity[1] = pos[1] - parent.pos[1];
-                counterClockwise(parity, 2);
+                if (probe.apply(lookout)) {
+                    double min = Double.POSITIVE_INFINITY;
+                    for (int[] endPos : end) {
+                        min = Math.min(min, Math.abs(pos[0] - endPos[0]) + Math.abs(pos[1] - endPos[1]));
+                    }
+
+                    return min;
+                }
+            }*/
+
+            int scanCount = 0, scanSum = 0;
+            counterClockwise(parity, 2);
+
+            for (int i = 0; i < 2; i++) {
+                scanMin[i][0] = ppos[0];
+                scanMin[i][1] = ppos[1];
+                for (int minDist = 1; minDist < 10; minDist++) {
+                    scanMin[i][0] += parity[0];
+                    scanMin[i][1] += parity[1];
+                    if (probe.apply(scanMin[i])) {
+                        scanCount++;
+                        scanSum+= minDist;
+                        break;
+                    }
+                }
+                parityInvert(parity);
+            }
+
+            
+            
+            if (scanCount == 2) {
+                int count = 0, max = (scanSum) * 6;
+                if (count < max) {
+                    int tempQuad;
+                    int[] windingNumbers = new int[end.length];
+                    int[] currQuad = new int[end.length];
+                    for (int endi = 0; endi < end.length; endi++) {
+                        currQuad[endi] = getRelativeQuad(end[endi], ppos);
+                        tempQuad = getRelativeQuad(end[endi], scanMin[0]);
+                        windingNumbers[endi] += getQuadJump(currQuad[endi], tempQuad);
+                        currQuad[endi] = tempQuad;
+                    }
     
-                for (int i = 0; i < 2; i++) {
-                    scanMin[i][0] = pos[0];
-                    scanMin[i][1] = pos[1];
-                    for (int minDist = 1; minDist < 10; minDist++) {
-                        scanMin[i][0] += parity[0];
-                        scanMin[i][1] += parity[1];
-                        if (probe.apply(scanMin[i])) {
-                            scanDist[i] = minDist;
+                
+                    int rotations = 7;
+                    boolean endFound = false;
+                    int[] backupParity = parity.clone();
+                    int angleChange = 0;
+                    while (count < max) {
+                        parityInvert(parity);
+                        angleChange += 4;
+                        rotations = 0;
+                        
+                        while (rotations < 7) {
+                            counterClockwise(parity, 1);
+                            angleChange -= 1;
+                            scanMin[0][0] += parity[0];
+                            scanMin[0][1] += parity[1];
+                            
+                            if (probe.apply(scanMin[0])) {
+                                for (int endi = 0; endi < end.length; endi++) {
+                                    tempQuad = getRelativeQuad(end[endi], scanMin[0]);
+                                    windingNumbers[endi] += getQuadJump(currQuad[endi], tempQuad);
+                                    currQuad[endi] = tempQuad;
+                                }
+
+                                if (scanMin[0][0] == scanMin[1][0] && scanMin[0][1] == scanMin[1][1]) {
+                                    parityInvert(parity);
+                                    angleChange += 4;
+
+                                    while (parity[0] != backupParity[0] || parity[1] != backupParity[1]) {
+                                        counterClockwise(parity, 1);
+                                        angleChange -= 1;
+                                    }
+
+                                    if (angleChange == 8) {
+                                        endFound = true;
+                                    }
+                                    
+                                }
+    
+                                break;
+                            }
+                            
+                            
+    
+                            scanMin[0][0] -= parity[0];
+                            scanMin[0][1] -= parity[1];
+    
+                            rotations++;
+                        }
+                        if (rotations == 7 || endFound) {
                             break;
                         }
+                        count++;
                     }
-                    parityInvert(parity);
-                }
-    
                 
-                
-                if (scanDist[0] != 0 && scanDist[1] != 0) {
-                    /*System.out.println("BARRIER START: [" + scanMin[0][0] + ", " + scanMin[0][1] + "]");
-                    System.out.println("PARITY: [" + parity[0] + ", " + parity[1] + "]");
-                    System.out.println("LOOKING FOR: ["  + scanMin[1][0] + ", " + scanMin[1][1] + "]");*/
-                    int count = 0, max = (scanDist[0] + scanDist[1] - 2) * 8;
-                    if (count < max) {
-                        int tempQuad;
-                        int[] windingNumbers = new int[end.length];
-                        int[] currQuad = new int[end.length];
+                    if (endFound) {
+                       
+                        
                         for (int endi = 0; endi < end.length; endi++) {
-                            currQuad[endi] = getRelativeQuad(end[endi], pos);
-                            tempQuad = getRelativeQuad(end[endi], scanMin[0]);
+                            tempQuad = getRelativeQuad(end[endi], ppos);
                             windingNumbers[endi] += getQuadJump(currQuad[endi], tempQuad);
                             currQuad[endi] = tempQuad;
                         }
-        
-                    
-                        int rotations = 7;
-                        boolean endFound = false;
-                        while (count < max) {
-                            parityInvert(parity);
-                            rotations = 0;
-                            
-                            while (rotations < 7) {
-                                counterClockwise(parity, 1);
-                                
-                                scanMin[0][0] += parity[0];
-                                scanMin[0][1] += parity[1];
-                                
-                                if (probe.apply(scanMin[0])) {
-                                    //System.out.println("NEXT BARRIER PIECE: [" + scanMin[0][0] + ", " + scanMin[0][1] + "]");
-                                    for (int endi = 0; endi < end.length; endi++) {
-                                        tempQuad = getRelativeQuad(end[endi], scanMin[0]);
-                                        windingNumbers[endi] += getQuadJump(currQuad[endi], tempQuad);
-                                        currQuad[endi] = tempQuad;
-                                    }
-            
-                                    if (scanMin[0][0] == scanMin[1][0] && scanMin[0][1] == scanMin[1][1]) {
-                                        //System.out.println("BARRIER COMPLETED");
-                                        endFound = true;
-                                    }
-        
-                                    break;
-                                }
-                                
-                                
-        
-                                scanMin[0][0] -= parity[0];
-                                scanMin[0][1] -= parity[1];
-        
-                                rotations++;
-                            }
-                            if (rotations == 7 || endFound) {
+                        boolean usefulArea = false;
+                        for (int wind : windingNumbers) {
+                            if (wind != 0) {  
+                                usefulArea = true;
                                 break;
                             }
-                            count++;
                         }
-                    
-                        if (endFound) {
+                        if (!usefulArea) {
+                            return Double.POSITIVE_INFINITY;
+                        }
                         
-                            for (int endi = 0; endi < end.length; endi++) {
-                                tempQuad = getRelativeQuad(end[endi], pos);
-                                windingNumbers[endi] += getQuadJump(currQuad[endi], tempQuad);
-                                currQuad[endi] = tempQuad;
-                            }
-                            boolean usefulArea = false;
-                            for (int wind : windingNumbers) {
-                                if (wind != 0) {
-                                    
-                                    usefulArea = true;
-                                    break;
-                                }
-                            }
-                            if (!usefulArea) {
-                                //System.out.println("PRUNED");
-                                return Double.POSITIVE_INFINITY;
-                            }
-                        }
-                    
                     }
-                }
-                    
                 
-    
-    
-    
+                }
             }
+                
             
-            double min = Double.POSITIVE_INFINITY;
-            for (int[] endPos : end) {
-                min = Math.min(min, Math.abs(pos[0] - endPos[0]) + Math.abs(pos[1] - endPos[1]));
-            }
-    
-            return min;
-        };
-    }
+
+
+
+        }
+        double min = Double.POSITIVE_INFINITY;
+        for (int[] endPos : end) {
+            min = Math.min(min, Math.abs(pos[0] - endPos[0]) + Math.abs(pos[1] - endPos[1]));
+        }
+
+        return min;
+    };
+
     
      /**
      * Breadth-First Search Hueristic Function
@@ -1198,83 +1215,6 @@ public class Lattice2D {
     public static void parityInvert(int[] parity) {
         parity[0] = -parity[0];
         parity[1] = -parity[1];
-    }
-
-    public static void main(String[] args) {
-        int[][] start = {{31, 44}};
-        int[][] end = {{44, 11}};
-        boolean[][] board = new boolean[1200][1200];
-
-        OpenSimplexNoise A = new OpenSimplexNoise(99l);
-        
-        Function<int[], Boolean> probeEasy = (pos) -> {
-            if (Math.abs(A.eval(pos[0], pos[1])) < 0.6) {
-                return false;
-            }
-
-            return true;
-        };
-        
-        Function<int[], Boolean> probeMed = (pos) -> {
-            if (pos[0] < 0 || pos[0] > 100 || pos[1] < 0 || pos[1] > 100) {
-                return true;
-            }
-
-            if (Math.abs(A.eval(pos[0], pos[1])) < 0.4) {
-                return false;
-            }
-
-            return true;
-        };
-
-        Function<int[], Boolean> probeDesigned = (pos) -> {
-           if (pos[1] == 10) {
-               if (pos[0] != 600) {
-                   return true;
-               }
-           }
-
-           if (pos[1] == 40) {
-               if (pos[0] != 300) {
-                   return true;
-               }
-           }
-
-           if (pos[0] < 0 || pos[0] > 1200) {
-               return true;
-           }
-
-           if (pos[1] < 0 || pos[1] > 1200) {
-               return true;
-           }
-
-            return false;
-        };
-
-        Lattice2D test = new Lattice2D(probeMed, start, end);
-        System.out.println("Bi: ");
-        SearchResults biRes = test.solve(hMH, hMH, Lattice2D.SEARCH_TYPE_BDAS);
-        biRes.genFolder("OUTPUT/BI");
-
-
-        System.out.println("Mono: ");
-        SearchResults monoRes = test.solve(hMH, null, Lattice2D.SEARCH_TYPE_AS);
-        monoRes.genFolder("OUTPUT/MONO");
-
-        System.out.println("IDA: ");
-        SearchResults idaRes = test.solve((new MHBUG()).h, null, Lattice2D.SEARCH_TYPE_ASID);
-        idaRes.genFolder("OUTPUT/IDA");
-
-        /*System.out.println("IDA: ");
-        SearchResults idaRes = test.solve(hMH, null, Lattice2D.SEARCH_TYPE_ASID);
-        System.out.println(idaRes);
-        idaRes.genFolder("OUTPUT/IDA");*/
-        /*System.out.println("DFID: ");
-        SearchResults dfidRes = test.solve(hMHBUG, null, Lattice2D.SEARCH_TYPE_DFID);
-        System.out.println(dfidRes);
-        idaRes.genFolder("OUTPUT/DFID");*/
-
-
     }
 
 }

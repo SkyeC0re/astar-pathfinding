@@ -8,6 +8,7 @@ public class TestSuite {
 
         OpenSimplexNoise alpha = new OpenSimplexNoise(99l);
         OpenSimplexNoise beta = new OpenSimplexNoise(420l);
+
         
         Function<int[], Boolean> easyNoise = (pos) -> {
             if (pos[0] < 0 || pos[0] > 100 || pos[1] < 0 || pos[1] > 100) {
@@ -15,6 +16,15 @@ public class TestSuite {
             }
 
             if (Math.abs(alpha.eval(pos[0], pos[1])) < 0.6) {
+                return false;
+            }
+
+            return true;
+        };
+
+        Function<int[], Boolean> bigObstacleNoise = (pos) -> {
+
+            if (Math.abs(beta.eval(pos[0] / 10.0, pos[1] / 10.0)) < 0.5) {
                 return false;
             }
 
@@ -109,11 +119,11 @@ public class TestSuite {
                 return false;
         };
 
-        start[0][0] = 4;
-        start[0][1] = 4;
+        start[0][0] = 35;
+        start[0][1] = 50;
 
-        end[0][0] = 78;
-        end[0][1] = 88;
+        end[0][0] = 46;
+        end[0][1] = 63;
         Lattice2D test = new Lattice2D(easyNoise, start, end);
 
         Lattice2D.SearchResults results = test.solve(Lattice2D.hMH, Lattice2D.hMH, Lattice2D.SEARCH_TYPE_BDAS);
@@ -122,13 +132,27 @@ public class TestSuite {
         results = test.solve(Lattice2D.hMH, null, Lattice2D.SEARCH_TYPE_AS);
         results.genFolder("Output/AS_MH_EasyNoise");
 
-        results = test.solve(Lattice2D.hMHEq, Lattice2D.hMHEq, Lattice2D.SEARCH_TYPE_BDAS);
-        results.genFolder("Output/BDAS_MHEq_EasyNoise");
+        results = test.solve(Lattice2D.hSLD, Lattice2D.hMHEq, Lattice2D.SEARCH_TYPE_BDAS);
+        results.genFolder("Output/BDAS_SLD_EasyNoise");
 
-        results = test.solve(Lattice2D.hMHEq, null, Lattice2D.SEARCH_TYPE_AS);
-        results.genFolder("Output/AS_MHEq_EasyNoise");
+        results = test.solve(Lattice2D.hSLD, null, Lattice2D.SEARCH_TYPE_AS);
+        results.genFolder("Output/AS_SLD_EasyNoise");
 
-        Lattice2D.MHBUG manhattenPruned = new Lattice2D.MHBUG();
+
+        results = test.solve(Lattice2D.hMHNook, Lattice2D.hMHNook, Lattice2D.SEARCH_TYPE_BDAS);
+        results.genFolder("Output/BDAS_MHNook_EasyNoise");
+
+        results = test.solve(Lattice2D.hMHNook, null, Lattice2D.SEARCH_TYPE_AS);
+        results.genFolder("Output/AS_MHNook_EasyNoise");
+
+        results = test.solve(Lattice2D.hNULL, null, Lattice2D.SEARCH_TYPE_AS);
+        results.genFolder("Output/AS_DJIK_EasyNoise");
+
+        results = test.solve(Lattice2D.hMHNook, null, Lattice2D.SEARCH_TYPE_ASID);
+        results.genFolder("Output/ASID_MHNook_EasyNoise");
+
+        /*results = test.solve(null, null, Lattice2D.SEARCH_TYPE_DFID);
+        results.genFolder("Output/DFID_NULL_EasyNoise");*/
 
         start[0][0] = 0;
         start[0][1] = 0;
@@ -136,36 +160,41 @@ public class TestSuite {
         end[0][0] = 1001;
         end[0][1] = 1001;
         test = new Lattice2D(hardNoise, start, end);
-        results = test.solve(Lattice2D.hMH, Lattice2D.hMH, Lattice2D.SEARCH_TYPE_BDAS);
+        /*results = test.solve(Lattice2D.hMH, Lattice2D.hMH, Lattice2D.SEARCH_TYPE_BDAS);
         results.genFolder("Output/BDAS_MH_HardNoise");
 
         results = test.solve(Lattice2D.hMH, null, Lattice2D.SEARCH_TYPE_AS);
         results.genFolder("Output/AS_MH_HardNoise");
 
+        results = test.solve(Lattice2D.hSLD, Lattice2D.hSLD, Lattice2D.SEARCH_TYPE_BDAS);
+        results.genFolder("Output/BDAS_SLD_HardNoise");
+
+        results = test.solve(Lattice2D.hSLD, null, Lattice2D.SEARCH_TYPE_AS);
+        results.genFolder("Output/AS_SLD_HardNoise");
+
+        results = test.solve(Lattice2D.hMHNook, Lattice2D.hMHNook, Lattice2D.SEARCH_TYPE_BDAS);
+        results.genFolder("Output/BDAS_MHNook_HardNoise");
+
+        results = test.solve(Lattice2D.hMHNook, null, Lattice2D.SEARCH_TYPE_AS);
+        results.genFolder("Output/AS_MHNook_HardNoise");
+
+        results = test.solve(Lattice2D.hNULL, null, Lattice2D.SEARCH_TYPE_AS);
+        results.genFolder("Output/AS_DJIK_HardNoise");
+
+        results = test.solve(Lattice2D.hNULL, Lattice2D.hNULL, Lattice2D.SEARCH_TYPE_BDAS);
+        results.genFolder("Output/BDAS_DJIK_HardNoise");*/
+
+        start[0][0] = 100;
+        start[0][1] = 50;
+
+        end[0][0] = 800;
+        end[0][1] = 1000;
+        test = new Lattice2D(bigObstacleNoise, start, end);
         results = test.solve(Lattice2D.hMHEq, Lattice2D.hMHEq, Lattice2D.SEARCH_TYPE_BDAS);
-        results.genFolder("Output/BDAS_MHEq_HardNoise");
+        results.genFolder("Output/BDAS_MHEq_BigObstacleNoise");
 
         results = test.solve(Lattice2D.hMHEq, null, Lattice2D.SEARCH_TYPE_AS);
-        results.genFolder("Output/AS_MHEq_HardNoise");
-
-        results = test.solve(manhattenPruned.h, manhattenPruned.h, Lattice2D.SEARCH_TYPE_BDAS);
-        results.genFolder("Output/BDAS_MHBUG_HardNoise");
-
-        results = test.solve(manhattenPruned.h, null, Lattice2D.SEARCH_TYPE_AS);
-        results.genFolder("Output/AS_MHBUG_HardNoise");
-
-
-        /*results = test.solve(Lattice2D.hMH, Lattice2D.hMH, Lattice2D.SEARCH_TYPE_BDAS);
-        results.genFolder("Output/BDAS_MHBUG_EasyNoise");
-
-
-        System.out.println("Mono: ");
-        SearchResults monoRes = test.solve(hMH, null, Lattice2D.SEARCH_TYPE_AS);
-        monoRes.genFolder("OUTPUT/MONO");
-
-        System.out.println("IDA: ");
-        SearchResults idaRes = test.solve((new MHBUG()).h, null, Lattice2D.SEARCH_TYPE_ASID);
-        idaRes.genFolder("OUTPUT/IDA");*/
+        results.genFolder("Output/AS_MHEq_BigObstacleNoise");
     }
 }
 

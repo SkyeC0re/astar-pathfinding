@@ -19,7 +19,8 @@ import java.awt.image.BufferedImage;
 import java.time.Duration;
 
 /**
- * A Class for representing a 2D lattice with obstacles.
+ * A Class for representing a 2D lattice with obstacles. Can solve the lattice (find a path from a start point to an
+ * end point) using one of several algorithms. These include: Depth-First Iterative Deepening, A* Iterative Deepening, A* and Bi-Directional A*
  * 
  * @author      Christoff van Zyl <20072015@sun.ac.za>
  * @version     1.0
@@ -75,7 +76,6 @@ public class Lattice2D {
      * Manhattan Heuristic Function
      */
     public static Function5<Function<int[], Boolean>, int[], Node, int[][], int[][], Double> hMH = (probe, pos, parent, start, end) -> {
-
         double min = Double.POSITIVE_INFINITY;
 
         for (int[]  endPos : end) {
@@ -89,8 +89,6 @@ public class Lattice2D {
      * Manhattan Heuristic Function (Preferring equal decrease in x and y). Not intended for use with multiple start and endpoints (use either but not both).
      */
     public static Function5<Function<int[], Boolean>, int[], Node, int[][], int[][], Double> hMHEq = (probe, pos, parent, start, end) -> {
-       
-
         double ret = Double.POSITIVE_INFINITY;
         double curr, ratio;
 
@@ -154,8 +152,6 @@ public class Lattice2D {
                 }
                 parityInvert(parity);
             }
-
-            
             
             if (scanCount == 2) {
                 int count = 0, max = (scanSum) * 6;
@@ -235,14 +231,8 @@ public class Lattice2D {
                             return Double.POSITIVE_INFINITY;
                         }     
                     }
-                
                 }
             }
-                
-            
-
-
-
         }
         double min = Double.POSITIVE_INFINITY;
         for (int[] endPos : end) {
@@ -464,7 +454,7 @@ public class Lattice2D {
                 }   
             }
 
-            /*if (path != null) {
+            if (path != null) {
                 for (int[] pos : path) {
                     if (pos[0] < minX) {
                         minX = pos[0];
@@ -482,10 +472,10 @@ public class Lattice2D {
                         maxY = pos[1];
                     }
                 }
-            }*/
+            }
 
             int [] pos;
-            /*for (Node n : leftClosed.values()) {
+            for (Node n : leftClosed.values()) {
                 pos = n.pos;
                 if (pos[0] < minX) {
                     minX = pos[0];
@@ -521,22 +511,20 @@ public class Lattice2D {
                 if (pos[1] > maxY) {
                     maxY = pos[1];
                 }
-            }*/
+            }
 
-            int diffX = maxX - minX;
-            int diffY = maxY - minY;
 
-            minX -= diffX + 5;
-            maxX += diffX + 5;
-            minY -= diffY + 5;
-            maxY += diffY + 5;
+            minX -= 2;
+            maxX += 2;
+            minY -= 2;
+            maxY += 2;
 
-            diffX = maxX - minX + 1;
-            diffY = maxY - minY + 1;
+            int diffX = maxX - minX + 1;
+            int diffY = maxY - minY + 1;
 
             try {
                 int scale = 1, xadd, yadd;
-                while (diffX * scale < 1000 && diffY * scale < 1000) {
+                while (diffX * scale < 800 && diffY * scale < 800) {
                     scale <<= 1;
                 }
                 BufferedImage img = new BufferedImage(diffX * scale, diffY * scale, BufferedImage.TYPE_INT_RGB);
@@ -997,8 +985,10 @@ public class Lattice2D {
     /**
      * Searches the lattice with a specific search method and hueristic(s).
      *
-     * @param h1 the primary hueristic lambda function.
-     * @param h2 the secondary hueristic lambda function (used for the backwards search in Bi-Directional A*)
+     * @param h1 the primary hueristic lambda function. It should take a probe function (see 2DLattice Constructor), an [x, y] position, 
+     *           a parent node and the start and end points and return a value.
+     * @param h2 the secondary hueristic lambda function (used for the backwards search in Bi-Directional A*). It should take a probe function (see 2DLattice Constructor), 
+     *           an [x, y] position, a parent node and the start and end points and return a value.
      * @param searchType the search type to use, see class constants.
      * @return a SearchResults data structure containing all the pertinent information regarding the search.
      */

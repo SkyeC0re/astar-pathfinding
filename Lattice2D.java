@@ -3,12 +3,16 @@ import java.util.HashSet;
 import java.util.LinkedList;
 import java.util.PriorityQueue;
 import java.util.Queue;
+import java.util.TreeSet;
 import java.util.function.Function;
 
 import javax.imageio.ImageIO;
 
+import java.io.BufferedReader;
 import java.io.File;
+import java.io.FileReader;
 import java.io.FileWriter;
+import java.io.Reader;
 import java.util.ArrayList;
 import java.time.Instant;
 import java.awt.image.BufferedImage;
@@ -29,878 +33,31 @@ public class Lattice2D {
     public static final int SEARCH_TYPE_AS = 2;     //A* (Graph-Search)
     public static final int SEARCH_TYPE_BDAS = 3;   //Bi-Directional A* (Graph-Search)
  
-    public static final int TUNNEL_AUTO_EXPLORE_MAX = 1000;
+
+    //Visualization Colors
+    private static final int COLOR_OBS = 0xff03071e;
+    private static final int COLOR_EMPTY = 0xffffffff;
+    private static final int COLOR_LEFT = 0xff118ab2;
+    private static final int COLOR_RIGHT = 0xff06d6a0;
+    private static final int COLOR_ROAD = 0xffd00000;
 
     public static long getLongPos(int[] pos) {
         return (long) (((long)pos[0]) << 32) | (pos[1] & 0xffffffffL);
     }
 
     /**
-     * A simple 4 parameter Function interface to use when creating hueristic lambda functions.
+     * A simple 5 parameter Function interface to use when creating hueristic lambda functions.
      */
     @FunctionalInterface
-    public static interface Function4<One, Two, Three, Four, Five> {
-        public Five apply(One one, Two two, Three three, Four four);
+    public static interface Function5<One, Two, Three, Four, Five, Six> {
+        public Six apply(One one, Two two, Three three, Four four, Five five);
     }
 
-    /**
-     * A Simple subclass of a LinkedList in which poll returns the last, not the first element.
-     */
-    public static class LIFOQueue<E> extends LinkedList<E> {
-
-        @Override
-        public E poll() {
-            return super.pollLast();
-        }
-    }
-
-    /**
-     * Used as a data structure to contain data regarding a search on a 2DLattice, as well as providing
-     * functionality with respect to exporting the data.
-     */
-    public static class SearchResults {
-        public Function<int[], Boolean> probe;
-        public int[][] start;
-        public int[][] end;
-        public LinkedList<int[]> path;
-        public double pathLen;
-        public ArrayList<Double> leftDepths = null;
-        public ArrayList<Double> rightDepths = null;
-        public ArrayList<Long> leftExplored = null;
-        public ArrayList<Long> rightExplored = null;
-        public ArrayList<Long> timeTaken = null;
-        public int minX = Integer.MAX_VALUE, maxX = Integer.MIN_VALUE, minY = Integer.MAX_VALUE, maxY = Integer.MIN_VALUE;
-        public BufferedImage img;
-        public long totalExplore = 0;
-        public long totalTime = 0;
-
-        /**
-         * Initializes the class and stores all the search data.
-         * 
-         * @param probe The relevant probe function.
-         * @param start The start position(s).
-         * @param end The possible end position(s).
-         * @param path The optimal path between any start and end position, null if non-existant.
-         * @param pathLen The length of the optimal path.
-         * @param leftClosed All the explored nodes starting from the start positions.
-         * @param rightClosed All the explored nodes starting from the end positions.
-         * @param leftDepths The f values of the left depths.
-         * @param rightDepths The f values of the right depths.
-         * @param leftExplored The total nodes explored from the start positions at each left depth.
-         * @param rightExplored The total noded explored from the end positions at each right depth.
-         * @param timeTaken The time taken (in milliseconds) for each depth search.
-         */
-        public SearchResults(Function<int[], Boolean> probe, int[][] start, int[][] end, LinkedList<int[]> path, double pathLen, HashMap<Long, Node> leftClosed, HashMap<Long, Node> rightClosed,
-                            ArrayList<Double> leftDepths, ArrayList<Double> rightDepths, ArrayList<Long> leftExplored, ArrayList<Long> rightExplored, ArrayList<Long> timeTaken) {
-            this.probe = probe;
-            this.start = start;
-            this.end = end;
-            this.path = path;
-            this.pathLen = pathLen;
-            this.leftDepths = leftDepths;
-            this.rightDepths = rightDepths;
-            this.leftExplored = leftExplored;
-            this.rightExplored = rightExplored;
-            this.timeTaken = timeTaken;
-
-            for (long explored : leftExplored) {
-                totalExplore += explored;
-            }
-            for (long explored : rightExplored) {
-                totalExplore += explored;
-            }
-            for (long timeMilli : timeTaken) {
-                totalTime += timeMilli;
-            }
-
-            for (int[] pos : start) {
-                if (pos[0] < minX) {
-                    minX = pos[0];
-                }
-
-                if (pos[0] > maxX) {
-                    maxX = pos[0];
-                }
-
-                if (pos[1] < minY) {
-                    minY = pos[1];
-                }
-
-                if (pos[1] > maxY) {
-                    maxY = pos[1];
-                }
-            }
-
-            for (int[] pos : end) {
-                if (pos[0] < minX) {
-                    minX = pos[0];
-                }
-
-                if (pos[0] > maxX) {
-                    maxX = pos[0];
-                }
-
-                if (pos[1] < minY) {
-                    minY = pos[1];
-                }
-
-                if (pos[1] > maxY) {
-                    maxY = pos[1];
-                }   
-            }
-
-            if (path != null) {
-                for (int[] pos : path) {
-                    if (pos[0] < minX) {
-                        minX = pos[0];
-                    }
-
-                    if (pos[0] > maxX) {
-                        maxX = pos[0];
-                    }
-
-                    if (pos[1] < minY) {
-                        minY = pos[1];
-                    }
-
-                    if (pos[1] > maxY) {
-                        maxY = pos[1];
-                    }
-                }
-            }
-
-            int [] pos;
-            for (Node n : leftClosed.values()) {
-                pos = n.pos;
-                if (pos[0] < minX) {
-                    minX = pos[0];
-                }
-
-                if (pos[0] > maxX) {
-                    maxX = pos[0];
-                }
-
-                if (pos[1] < minY) {
-                    minY = pos[1];
-                }
-
-                if (pos[1] > maxY) {
-                    maxY = pos[1];
-                }
-            }
-
-            for (Node n : rightClosed.values()) {
-                pos = n.pos;
-                if (pos[0] < minX) {
-                    minX = pos[0];
-                }
-
-                if (pos[0] > maxX) {
-                    maxX = pos[0];
-                }
-
-                if (pos[1] < minY) {
-                    minY = pos[1];
-                }
-
-                if (pos[1] > maxY) {
-                    maxY = pos[1];
-                }
-            }
-
-            minX-=10;
-            minY-=10;
-            maxX+=10;
-            maxY+=10;
-
-
-            int diffX = maxX - minX + 1;
-            int diffY = maxY - minY + 1;
-
-            try {
-                BufferedImage img = new BufferedImage(diffX, diffY, BufferedImage.TYPE_INT_RGB);
-                pos = new int[2];
-                Node node = new Node(null, pos, 0.0, 0.0);
-                for (int y = 0; y < diffY; y++) {
-                    pos[1] = minY + y;
-                    for (int x = 0; x < diffX; x++) {
-                        pos[0] = minX + x;
-                        
-                        if (probe.apply(pos)) {
-                            img.setRGB(x, y, 0xFF000000);
-                        } else if (leftClosed.containsKey(node.getLongPos())) {
-                            img.setRGB(x, y, 0xFF00FF00);
-                        } else if (rightClosed.containsKey(node.getLongPos())) {
-                            img.setRGB(x, y, 0xFF0000FF);
-                        } else {
-                            img.setRGB(x, y, 0xFFFFFFFF);
-                        }
-                        
-                    }
-                }
-                
-                    if (path != null) {
-                        for (int[] pathPos : path) {
-                            try {
-                                img.setRGB(pathPos[0] - minX, pathPos[1] - minY, 0xFFFF0000);
-                            } catch (Exception ex) {}
-                        }
-                    }
-                
-
-                this.img = img;
-            } catch (Exception ex) {
-                this.img = null;
-            }
-        }
-
-        @Override
-        public String toString() {
-            return Double.toString(pathLen);
-        }
-
-        /**
-         * Generates a .png image representing the nodes in the frontier and explored nodes (if present) (Green from start and Blue from end), as well as the optimal path (Red) if present.
-         *
-         * @param fname the name of the file to save the image to.
-         */
-        public void genImage(String fname) {
-           
-            if (img == null) {
-                return;
-            }
-
-            try {
-                ImageIO.write(img, "bmp",  new File(fname + ".bmp"));
-            } catch (Exception ex) {
-                ex.printStackTrace();
-            }
-        }
-
-        /**
-         * Generates a .csv file with all relevant search information.
-         *
-         * @param fname the name of the file to save the output data to.
-         */
-        public void genCSV(String fname) {
-            try {
-                FileWriter csvWriter = new FileWriter(fname + ".csv");
-
-                csvWriter.append("Basic Info Labels:, Basic Info: , , Path X, Path Y, , Left Depth, Left Nodes Explored, Right Depth, Right Nodes Explored,Time Taken (ms)\n");
-                int i = 0;
-                boolean tryNext = true;
-                int [] pos;
-                while(tryNext) {
-                    tryNext = false;
-                    if (i == 0) {
-                        csvWriter.append("Total Nodes Explored:, ");
-                        csvWriter.append(Long.toString(totalExplore));
-                        csvWriter.append(",");
-                        tryNext = true;
-
-                    } else if (i == 1) {
-                        csvWriter.append("Total Time Taken (ms):,");
-                        csvWriter.append(Long.toString(totalTime));
-                        csvWriter.append(",");
-                        tryNext = true;
-                    } else if (i == 2) {
-                        csvWriter.append("Optimal Path Length:,");
-                        csvWriter.append(Double.toString(pathLen));
-                        csvWriter.append(",");
-                        tryNext = true;
-                    } else {
-                        csvWriter.append(",,");
-                    }
-                    csvWriter.append(",");
-
-                    if (path != null && !path.isEmpty()) {
-                        pos = path.pollFirst();
-                        csvWriter.append(Integer.toString(pos[0]));
-                        csvWriter.append(",");
-                        csvWriter.append(Integer.toString(pos[1]));
-                        csvWriter.append(",");
-                        tryNext = true;
-                    } else {
-                        csvWriter.append(",,");
-                    }
-                    csvWriter.append(",");
-
-
-                    if (i < leftDepths.size()) {
-                        csvWriter.append(Double.toString(leftDepths.get(i)));
-                        csvWriter.append(",");
-                        csvWriter.append(Long.toString(leftExplored.get(i)));
-                        csvWriter.append(",");
-                        tryNext = true;
-                    } else {
-                        csvWriter.append(",,");
-                    }
-
-                    if (i < rightDepths.size()) {
-                        csvWriter.append(Double.toString(rightDepths.get(i)));
-                        csvWriter.append(",");
-                        csvWriter.append(Long.toString(rightExplored.get(i)));
-                        csvWriter.append(",");
-                        tryNext = true;
-                    } else {
-                        csvWriter.append(",,");
-                    }
-
-                    if (i < timeTaken.size()) {
-                        csvWriter.append(Long.toString(timeTaken.get(i)));
-                        tryNext = true;
-                    }
-
-
-                    csvWriter.append("\n");
-                    i++;
-                }
-
-                csvWriter.flush();
-                csvWriter.close();
-            } catch (Exception ex) {}
-        }
-
-        public void genFolder(String folderName) {
-            try {
-                new File(folderName).mkdirs();
-                genCSV(folderName + "/Data");
-                genImage(folderName + "/Image");
-            } catch (Exception ex) {}
-        }
-
-    }
-
-    /**
-     * Generates all the valid neighbours of a position.
-     *
-     * @param pos the position of which to return the neighbours for.
-     * @param probe the 2D Lattice probe function.
-     * @return an arraylist of valid neighbour positions.
-     */
-    public static ArrayList<int[]> nodeNN(int[] pos, Function<int[], Boolean> probe) {
-        ArrayList<int[]> nn = new ArrayList<int[]>();
-
-        int[] nnPos = pos.clone();
-        nnPos[0]++;
-
-        if (!probe.apply(nnPos)) {
-            nn.add(nnPos);
-        }
-
-        nnPos = pos.clone();
-        nnPos[0]--;
-
-        if (!probe.apply(nnPos)) {
-            nn.add(nnPos);
-        }
-
-        nnPos = pos.clone();
-        nnPos[1]++;
-
-        if (!probe.apply(nnPos)) {
-            nn.add(nnPos);
-        }
-
-        nnPos = pos.clone();
-        nnPos[1]--;
-
-        if (!probe.apply(nnPos)) {
-            nn.add(nnPos);
-        }
-        return nn;
-
-    }
-
-     /**
-     * Generates all the valid neighbours of a Node, will tunnel if a tunnel is detected (A node that has only 1 neighbour due to obstacles).
-     *
-     */
-    private static LinkedList<Node> genValidNeighbours(Node node, Function<int[], Boolean> probe, Function4<Function<int[], Boolean>, int[], Node, int[][], Double> h,
-                    int[][] dest, HashMap<Long, Node> selfClosed, HashMap<Long, Node> otherClosed, boolean onlyRefine) {
-        LinkedList<Node> neighbours = new LinkedList<Node>();
-        Node checkNode;
-        int[] parentPos = null;
-        double tempH;
-        int[] pos;
-        int counter = 0;
-        int probeCount;
-        while (counter < TUNNEL_AUTO_EXPLORE_MAX) {
-            neighbours.clear();
-            if (node.parent != null) {
-                parentPos = node.parent.pos;
-            } else {
-                parentPos = null;   
-            }
-            probeCount = 0;
-            for (int posDim = 0; posDim < 2; posDim++) {
-                for (int add = 1; add >= -1; add -= 2) {
-                    pos = node.pos.clone();
-                    pos[posDim] += add;
-                    if (probe.apply(pos)) {
-                        probeCount++;
-                        continue;
-                    }
-
-                    if (parentPos != null) {
-                        if (pos[0] == parentPos[0] && pos[1] == parentPos[1]) {
-                            probeCount++;
-                            continue;
-                        }
-                    }
-
-                    
-
-                    if ((((checkNode = selfClosed.get(getLongPos(pos))) != null) && (checkNode.gVal <= node.gVal + 1.0)) || (onlyRefine && checkNode == null)) {
-                        continue;
-                    }
-
-                    tempH = h.apply(probe, pos, node, dest);
-                    if (tempH != Double.POSITIVE_INFINITY) {
-                        neighbours.add(new Node(node, pos, node.gVal + 1.0, tempH));
-                        
-                    }
-                    
-                }
-            }
-
-            counter++;
-            /*if (probeCount == 3 && neighbours.size() == 1) {
-                node = neighbours.peek();
-                if (otherClosed.get(node.getLongPos()) != null) {
-                    break;
-                }
-                continue;
-            }*/
-            break;
-            
-        }
-        
-        
-        return neighbours;
-
-    }
-
-    /**
-    * A Data structure used to represent positions in the search space, with respect to their positions, h(n) and g(n) values, as well as their parent position.
-    */
-    public static class Node implements Comparable<Node>{
-        public Node parent;
-        public int[] pos;
-        public double gVal, hVal;
-
-        public Node(Node parent, int[] pos, double gVal, double hVal) {
-            this.parent = parent;
-            this.pos = pos;
-            this.gVal = gVal;
-            this.hVal = hVal;
-        }
-
-        @Override
-        public int hashCode() {
-            int hash = 17;
-            hash = ((hash + pos[0]) << 5) - (hash + pos[0]);
-            hash = ((hash + pos[1]) << 5) - (hash + pos[1]);
-            return hash;
-        }
-
-        @Override
-        public boolean equals(Object obj) {
-            if (obj == null) {
-                return false;
-            }
-
-            if (!(obj instanceof Node)) {
-                return false;
-            }
-
-            Node o = (Node) obj;
-            if (pos[0] != o.pos[0] || pos[1] != o.pos[1]) {
-                return false;
-            }
-
-            return true;
-        }
-
-        public int compareTo(Node o) {
-            if (this.gVal + this.hVal < o.gVal + o.hVal) {
-                return -1;
-            }
-
-            if (this.gVal + this.hVal > o.gVal + o.hVal) {
-                return 1;
-            }
-
-            if (this.hVal < o.hVal) {
-                return -1;
-            }
-
-            if (this.hVal > o.hVal) {
-                return 1;
-            }
-
-            return 0;
-        }
-
-        public long getLongPos() {
-            return (long) (((long)pos[0]) << 32) | (pos[1] & 0xffffffffL);
-        }
-
-    }
-
-   
-
-    private int[][] start;
-    private int[][] end;
-    private Function<int[], Boolean> probe;
-
-
-    public Lattice2D(boolean[][] board, int[][] start, int[][] end) {
-        Function<int[], Boolean> probe = (pos) -> {
-            if (pos[1] < 0 || pos[1] >= board.length) {
-                return true;
-            }
-
-            if (pos[0] < 0 || pos[0] >= board[0].length) {
-                return true;
-            }
-            if (board[pos[1]][pos[0]] == true) {
-                System.out.println("ERRR");
-            }
-            return board[pos[1]][pos[0]];
-        };
-        this.probe = probe;
-        this.start = start;
-        this.end = end;
-    }
-
-    public Lattice2D(Function<int[], Boolean> probe, int[][] start, int[][] end) {
-        this.probe = probe;
-        this.start = start;
-        this.end = end;
-    }
-
-    /**
-     * Searches the lattice with a specific search method and hueristic(s).
-     *
-     * @param h1 the primary hueristic lambda function.
-     * @param h2 the secondary hueristic lambda function (used for the backwards search in Bi-Directional A*)
-     * @param searchType the search type to use, see class constants.
-     * @return a SearchResults data structure containing all the pertinent information regarding the search.
-     */
-    public SearchResults solve(Function4<Function<int[], Boolean>, int[], Node, int[][], Double> h1, Function4<Function<int[], Boolean>, int[], Node, int[][], Double> h2, int searchType) {
-        SearchResults ret;
-
-        Queue<Node> leftOpen, rightOpen;
-        double pathLen = Double.POSITIVE_INFINITY;
-        long leftExplore = 0, rightExplore = 0;
-        Node middleFromLeft = null, middleFromRight = null;
-        HashMap<Long, Node> leftClosed = new HashMap<Long, Node>();
-        HashMap<Long, Node> rightClosed = new HashMap<Long, Node>();
-        ArrayList<Double> leftDepths = new ArrayList<Double>();
-        ArrayList<Double> rightDepths = new ArrayList<Double>();
-        ArrayList<Long> leftExplored = new ArrayList<Long>();
-        ArrayList<Long> rightExplored = new ArrayList<Long>();
-        ArrayList<Long> timeTaken = new ArrayList<Long>();
-
-        Node workingNode;
-        Node checkNode;
-        boolean allEmpty = true, run = false;
-        Instant startTime = Instant.now();
-        boolean oneStart = false, oneEnd = false;
-
-        for (int[] pos : start) {
-            if (!probe.apply(pos)) {
-                oneStart = true;
-                break;
-            }
-        }
-
-        for (int[] pos : end) {
-            if (!probe.apply(pos)) {
-                oneEnd = true;
-                break;
-            }
-        }        
-
-        run = oneStart && oneEnd;
-
-        //Iterative Deepening Searches
-        if (searchType == SEARCH_TYPE_DFID || searchType == SEARCH_TYPE_ASID) {
-            double leftCurrDepth = -1.0, leftNextDepth;
-            leftNextDepth = 0.0;
-            if (searchType == SEARCH_TYPE_DFID) {
-                System.out.println("Running Depth First Iterative Deepening Search:");
-                leftOpen = new LIFOQueue<Node>();
-                h1 = hNULL;
-            } else {
-                System.out.println("Running A* Iterative Deepening Search:");
-                leftOpen = new LIFOQueue<Node>();
-            }
-            Instant depthStart = (startTime = Instant.now());
-            while(run) {
-               
-                if (allEmpty) {
-                
-                    if (leftNextDepth == Double.POSITIVE_INFINITY) {
-                        break;
-                    }
     
-                    if (pathLen < Double.POSITIVE_INFINITY) {
-                       break;
-                    }
-    
-                    allEmpty = false;
-    
-                   
-
-                    if (!rightClosed.isEmpty()) {
-                        leftDepths.add(leftCurrDepth);
-                        leftExplored.add(leftExplore);
-                        long millTime = Duration.between(depthStart, Instant.now()).toMillis();
-                        timeTaken.add(millTime);
-                        System.out.println("Depth: " + leftCurrDepth + " || Explored: " + leftExplore + " || Time(ms): " + millTime);
-                    } 
-                    leftClosed.clear();
-                    leftOpen.clear();
-
-                    leftExplore = 0;
-                    leftCurrDepth = leftNextDepth;
-                    leftNextDepth = Double.POSITIVE_INFINITY;
-                    
-                    Node newNode;
-                    for (int[] pos : start) {
-                        if (!probe.apply(pos)) {
-                            newNode = new Node(null, pos, 0, h1.apply(probe, pos, null, end));
-                            leftOpen.add(newNode);
-                            leftClosed.put(newNode.getLongPos(), newNode);
-                            leftExplore++;
-                        }
-                    }
-                    
-                    
-                    if (rightClosed.isEmpty()) {
-                        for (int[] pos : end) {
-                            if (!probe.apply(pos)) {
-                                newNode = new Node(null, pos, 0, 0);
-                                if ((checkNode = leftClosed.get(newNode.getLongPos())) != null) {
-                                    middleFromLeft = checkNode;
-                                    middleFromRight = newNode;
-                                    pathLen = 0.0;
-                                    run = false;
-                                    break;
-                                }
-                                rightClosed.put(newNode.getLongPos(), newNode);
-                                rightExplore++;
-                            }
-                        }
-                        if (!run) {
-                            break;
-                        }
-                    }
-    
-                    depthStart = Instant.now();
-                    
-                }
-                    
-            
-                if ((workingNode = leftOpen.poll()) == null) {
-                    allEmpty = true;
-                } else if ((checkNode = leftClosed.get(workingNode.getLongPos())) != null && workingNode == checkNode) {
-                    leftClosed.remove(workingNode.getLongPos());
-                    for (Node newNode : genValidNeighbours(workingNode, probe, h1, end, leftClosed, rightClosed, false)) {
-                        if (newNode.gVal + Math.ceil(newNode.hVal) <= leftCurrDepth) {
-                            if ((checkNode = rightClosed.get(newNode.getLongPos())) != null) {
-                                if (newNode.gVal < pathLen) {
-                                    pathLen = newNode.gVal;
-                                    middleFromLeft = newNode;
-                                    middleFromRight = checkNode;
-                                    run = false;
-                                    leftOpen.clear();
-                                    break;
-                                }
-                            } else {
-                                leftOpen.add(newNode);
-                                leftClosed.put(newNode.getLongPos(), newNode);
-                                leftExplore++;
-                            }
-                        } else if (newNode.gVal + Math.ceil(newNode.hVal) < leftNextDepth) {
-                            leftNextDepth = newNode.gVal + newNode.hVal;
-                        }
-                    }
-                        
-
-                }
-                
-               
-            }
-
-            leftDepths.add(leftCurrDepth);
-            leftExplored.add(leftExplore);
-        
-        // Tree-Graph Searches
-        } else if (searchType == SEARCH_TYPE_AS || searchType == SEARCH_TYPE_BDAS) {
-            if (searchType == SEARCH_TYPE_AS) {
-                System.out.println("Running A*:");
-            } else {
-                System.out.println("Running Bi-Directional A*:");
-            }
-            leftOpen = new PriorityQueue<Node>();
-            rightOpen = new PriorityQueue<Node>();
-
-            
-            for (int[] pos : start) {
-                if (!probe.apply(pos)) {
-                    Node newNode = new Node(null, pos, 0, h1.apply(probe, pos, null , end));
-                    leftOpen.add(newNode);
-                    leftClosed.put(newNode.getLongPos(), newNode);
-                    leftExplore++;
-                }
-            }
-            
-            
-            for (int[] pos : end) {
-                if (!probe.apply(pos)) {
-                    Node newNode;
-                    if (searchType == SEARCH_TYPE_BDAS) {
-                        newNode = new Node(null, pos, 0, h2.apply(probe, pos, null, start));
-                    } else {
-                        newNode = new Node(null, pos, 0, 0);
-                    }
-                    if ((checkNode = leftClosed.get(newNode.getLongPos())) != null) {
-                        middleFromLeft = checkNode;
-                        middleFromRight = newNode;
-                        pathLen = 0.0;
-                        run = false;
-                        break;
-                    }
-                    if (searchType == SEARCH_TYPE_BDAS) {
-                        rightOpen.add(newNode);
-                    }
-                    rightClosed.put(newNode.getLongPos(), newNode);
-                    rightExplore++;
-                }
-            }
-            allEmpty = false;
-            boolean rightOnlyRefine = false, leftOnlyRefine = false;
-            startTime = Instant.now();
-            while(run && !allEmpty) {
-            
-                if ((workingNode = leftOpen.poll()) == null) {
-                    if (pathLen == Double.POSITIVE_INFINITY) {
-                        break;
-                    }
-                    allEmpty = true;
-                } else if (workingNode.gVal + Math.ceil(workingNode.hVal) < pathLen) {
-                    if ((checkNode = leftClosed.get(workingNode.getLongPos())) != null && workingNode == checkNode) {
-                        
-                        for (Node newNode : genValidNeighbours(workingNode, probe, h1, end, leftClosed, rightClosed, leftOnlyRefine)) {  
-                            if (newNode.gVal + Math.ceil(newNode.hVal) < pathLen) {
-                                if ((checkNode = rightClosed.get(newNode.getLongPos())) != null) {
-                                    if (newNode.gVal + checkNode.gVal < pathLen) {
-                                        pathLen = newNode.gVal + checkNode.gVal;
-                                        middleFromLeft = newNode;
-                                        middleFromRight = checkNode;
-                                        rightOnlyRefine = true;
-                                    }
-                                } else {
-                                    leftOpen.add(newNode);
-                                    //leftClosed.put(newNode.getLongPos(), newNode);
-                                    do {
-                                        leftClosed.put(newNode.getLongPos(), newNode);
-                                        newNode = newNode.parent;
-                                        leftExplore++;
-                                    } while (newNode != workingNode);
-                                }
-                                
-                            }
-                        }
-                    }
-                    
-                } else {
-                    allEmpty = true;
-                    rightOnlyRefine = true;
-                    leftOpen.clear();
-                }
-    
-                if (searchType == SEARCH_TYPE_BDAS) {
-                    if ((workingNode = rightOpen.poll()) == null) {
-                        if (pathLen == Double.POSITIVE_INFINITY) {
-                            break;
-                        }
-                    } else if (workingNode.gVal + Math.ceil(workingNode.hVal) < pathLen) {
-                        if ((checkNode = rightClosed.get(workingNode.getLongPos())) != null && workingNode == checkNode) {
-                            
-                            for (Node newNode : genValidNeighbours(workingNode, probe, h2, start, rightClosed, leftClosed, rightOnlyRefine)) {
-                                
-                                if (newNode.gVal + Math.ceil(newNode.hVal) < pathLen) {
-                                    if ((checkNode = leftClosed.get(newNode.getLongPos())) != null) {
-                                        if (newNode.gVal + checkNode.gVal < pathLen) {
-                                            pathLen = newNode.gVal + checkNode.gVal;
-                                            middleFromLeft = checkNode;
-                                            middleFromRight = newNode;
-                                            rightOnlyRefine = true;
-                                        }
-                                    } else {
-                                        rightOpen.add(newNode);
-                                        //rightClosed.put(newNode.getLongPos(), newNode);
-                                        do {
-                                            rightClosed.put(newNode.getLongPos(), newNode);
-                                            newNode = newNode.parent;
-                                            rightExplore++;
-                                        } while (newNode != workingNode);
-                                    }
-                                    
-                                }
-                            }
-                        }
-                        
-                    } else {
-                        leftOnlyRefine = true;
-                        rightOpen.clear();
-                    }
-                }
-            }
-            Instant finishTime = Instant.now();
-            timeTaken.add(Duration.between(startTime, finishTime).toMillis());
-
-            leftDepths.add(Double.POSITIVE_INFINITY);
-            leftExplored.add(leftExplore);
-            if (searchType == SEARCH_TYPE_BDAS) {
-                rightDepths.add(Double.POSITIVE_INFINITY);
-                rightExplored.add(rightExplore);
-            }
-        }
-
-        
-        
-
-        LinkedList<int[]> path;
-        if (pathLen < Double.POSITIVE_INFINITY) {
-            path = new LinkedList<int[]>();
-            while (middleFromLeft != null) {
-                path.addFirst(middleFromLeft.pos);
-                middleFromLeft = middleFromLeft.parent;
-            }
-
-            middleFromRight = middleFromRight.parent;
-            while (middleFromRight != null) {
-                path.addLast(middleFromRight.pos);
-                middleFromRight = middleFromRight.parent;
-            }
-        } else {
-            path = null;
-        }
-        
-        ret = new SearchResults(probe, start, end, path, pathLen, leftClosed, rightClosed, leftDepths, rightDepths, leftExplored, rightExplored, timeTaken);
-        System.out.println("Search Completed: Optimal Path Length: " + Double.toString(pathLen) + " || Total Nodes Explored: " + ret.totalExplore + " || Time(ms): " + ret.totalTime + "\n");
-        return ret;
-    }
-
     /**
      * Straight Line Hueristic Function
      */
-    public static Function4<Function<int[], Boolean>, int[], Node, int[][], Double> hSLD = (probe, pos, parent, end) -> {
+    public static Function5<Function<int[], Boolean>, int[], Node, int[][], int[][], Double> hSLD = (probe, pos, parent, start, end) -> {
         if (end.length < 1) {
             return Double.POSITIVE_INFINITY;
         }
@@ -917,7 +74,7 @@ public class Lattice2D {
     /**
      * Manhattan Heuristic Function
      */
-    public static Function4<Function<int[], Boolean>, int[], Node, int[][], Double> hMH = (probe, pos, parent, end) -> {
+    public static Function5<Function<int[], Boolean>, int[], Node, int[][], int[][], Double> hMH = (probe, pos, parent, start, end) -> {
 
         double min = Double.POSITIVE_INFINITY;
 
@@ -929,21 +86,26 @@ public class Lattice2D {
     };
 
     /**
-     * Manhattan Heuristic Function (Preferring equal decrease in x and y)
+     * Manhattan Heuristic Function (Preferring equal decrease in x and y). Not intended for use with multiple start and endpoints (use either but not both).
      */
-    public static Function4<Function<int[], Boolean>, int[], Node, int[][], Double> hMHEq = (probe, pos, parent, end) -> {
+    public static Function5<Function<int[], Boolean>, int[], Node, int[][], int[][], Double> hMHEq = (probe, pos, parent, start, end) -> {
        
 
         double ret = Double.POSITIVE_INFINITY;
-        double curr;
-        int xDiff, yDiff, sum;
-        for (int[] endPos : end) {
-            xDiff = Math.abs(pos[0] - endPos[0]);
-            yDiff = Math.abs(pos[1] - endPos[1]);
-            sum = xDiff + yDiff;
-            curr = sum - ((sum*sum)>>>2) / (xDiff * xDiff + yDiff * yDiff + 1.0);
+        double curr, ratio;
 
-            ret = Math.min(ret, curr);
+        for (int[] startPos : start) {
+            for (int[] endPos : end) {
+                ratio = Math.pow(startPos[0] - endPos[0], 2) + Math.pow(startPos[1] - endPos[1], 2);
+                
+                if (ratio == 0.0) {
+                    return 0.0;
+                }
+                ratio /= Math.pow(pos[0] - endPos[0], 2) + Math.pow(pos[1] - endPos[1], 2) + Math.pow(startPos[0] - pos[0], 2) + Math.pow(startPos[1] - pos[1], 2);
+                curr =  Math.abs(pos[0] - endPos[0]) + Math.abs(pos[1] - endPos[1]) - 0.5 * ratio;
+
+                ret = Math.min(ret, curr);
+            }
         }
 
         return ret;
@@ -952,7 +114,7 @@ public class Lattice2D {
     /**
      * A modified Manhattan Distance Function that attempts to evade nooks and crannies.
      */
-    public static Function4<Function<int[], Boolean>, int[], Node, int[][], Double> hMHNook = (probe, pos, parent, end) -> {
+    public static Function5<Function<int[], Boolean>, int[], Node, int[][], int[][], Double> hMHNook = (probe, pos, parent, start, end) -> {
             
         if (parent != null) {
             int[][] scanMin = new int[2][2];
@@ -982,12 +144,11 @@ public class Lattice2D {
             for (int i = 0; i < 2; i++) {
                 scanMin[i][0] = ppos[0];
                 scanMin[i][1] = ppos[1];
-                for (int minDist = 1; minDist < 10; minDist++) {
+                for (; scanSum < 15; scanSum++) {
                     scanMin[i][0] += parity[0];
                     scanMin[i][1] += parity[1];
                     if (probe.apply(scanMin[i])) {
                         scanCount++;
-                        scanSum+= minDist;
                         break;
                     }
                 }
@@ -1008,8 +169,6 @@ public class Lattice2D {
                         windingNumbers[endi] += getQuadJump(currQuad[endi], tempQuad);
                         currQuad[endi] = tempQuad;
                     }
-    
-                
                     int rotations = 7;
                     boolean endFound = false;
                     int[] backupParity = parity.clone();
@@ -1049,12 +208,8 @@ public class Lattice2D {
     
                                 break;
                             }
-                            
-                            
-    
                             scanMin[0][0] -= parity[0];
                             scanMin[0][1] -= parity[1];
-    
                             rotations++;
                         }
                         if (rotations == 7 || endFound) {
@@ -1063,9 +218,7 @@ public class Lattice2D {
                         count++;
                     }
                 
-                    if (endFound) {
-                       
-                        
+                    if (endFound) {  
                         for (int endi = 0; endi < end.length; endi++) {
                             tempQuad = getRelativeQuad(end[endi], ppos);
                             windingNumbers[endi] += getQuadJump(currQuad[endi], tempQuad);
@@ -1080,8 +233,7 @@ public class Lattice2D {
                         }
                         if (!usefulArea) {
                             return Double.POSITIVE_INFINITY;
-                        }
-                        
+                        }     
                     }
                 
                 }
@@ -1104,7 +256,7 @@ public class Lattice2D {
      /**
      * Breadth-First Search Hueristic Function
      */
-    public static Function4<Function<int[], Boolean>, int[], Node, int[][], Double> hBFS = (probe, pos, parent, end) -> {
+    public static Function5<Function<int[], Boolean>, int[], Node, int[][], int[][], Double> hBFS = (probe, pos, parent, start, end) -> {
         for (int[] endPos : end) {
             if (endPos[0] == pos[0] && endPos[1] == pos[1]) {
                 return 0.0;
@@ -1115,9 +267,9 @@ public class Lattice2D {
     };
 
      /**
-     * Uniform Cost Hueristic Function (For Djikstra and Depth-First Iterative Deepening)
+     * Uniform Cost Hueristic Function (For Dijkstra and Depth-First Iterative Deepening)
      */
-    public static Function4<Function<int[], Boolean>, int[], Node, int[][], Double> hNULL = (probe, pos, parent, end) -> {
+    public static Function5<Function<int[], Boolean>, int[], Node, int[][], int[][], Double> hNULL = (probe, pos, parent, start, end) -> {
        return 0.0;
     };
 
@@ -1216,5 +368,965 @@ public class Lattice2D {
         parity[0] = -parity[0];
         parity[1] = -parity[1];
     }
+
+    /**
+     * Used as a data structure to contain data regarding a search on a 2DLattice, as well as providing
+     * functionality with respect to exporting the data.
+     */
+    public static class SearchResults {
+        public Function<int[], Boolean> probe;
+        public int[][] start;
+        public int[][] end;
+        public LinkedList<int[]> path;
+        public double pathLen;
+        public ArrayList<Double> leftDepths = null;
+        public ArrayList<Double> rightDepths = null;
+        public ArrayList<Long> leftExplored = null;
+        public ArrayList<Long> rightExplored = null;
+        public ArrayList<Long> timeTaken = null;
+        public int minX = Integer.MAX_VALUE, maxX = Integer.MIN_VALUE, minY = Integer.MAX_VALUE, maxY = Integer.MIN_VALUE;
+        public BufferedImage img;
+        public long totalExplore = 0;
+        public long totalTime = 0;
+
+        /**
+         * Initializes the class and stores all the search data.
+         * 
+         * @param probe The relevant probe function.
+         * @param start The start position(s).
+         * @param end The possible end position(s).
+         * @param path The optimal path between any start and end position, null if non-existant.
+         * @param pathLen The length of the optimal path.
+         * @param leftClosed All the explored nodes starting from the start positions.
+         * @param rightClosed All the explored nodes starting from the end positions.
+         * @param leftDepths The f values of the left depths.
+         * @param rightDepths The f values of the right depths.
+         * @param leftExplored The total nodes explored from the start positions at each left depth.
+         * @param rightExplored The total noded explored from the end positions at each right depth.
+         * @param timeTaken The time taken (in milliseconds) for each depth search.
+         */
+        public SearchResults(Function<int[], Boolean> probe, int[][] start, int[][] end, LinkedList<int[]> path, double pathLen, HashMap<Long, Node> leftClosed, HashMap<Long, Node> rightClosed,
+                            ArrayList<Double> leftDepths, ArrayList<Double> rightDepths, ArrayList<Long> leftExplored, ArrayList<Long> rightExplored, ArrayList<Long> timeTaken) {
+            this.probe = probe;
+            this.start = start;
+            this.end = end;
+            this.path = path;
+            this.pathLen = pathLen;
+            this.leftDepths = leftDepths;
+            this.rightDepths = rightDepths;
+            this.leftExplored = leftExplored;
+            this.rightExplored = rightExplored;
+            this.timeTaken = timeTaken;
+
+            for (long explored : leftExplored) {
+                totalExplore += explored;
+            }
+            for (long explored : rightExplored) {
+                totalExplore += explored;
+            }
+            for (long timeMilli : timeTaken) {
+                totalTime += timeMilli;
+            }
+
+            for (int[] pos : start) {
+                if (pos[0] < minX) {
+                    minX = pos[0];
+                }
+
+                if (pos[0] > maxX) {
+                    maxX = pos[0];
+                }
+
+                if (pos[1] < minY) {
+                    minY = pos[1];
+                }
+
+                if (pos[1] > maxY) {
+                    maxY = pos[1];
+                }
+            }
+
+            for (int[] pos : end) {
+                if (pos[0] < minX) {
+                    minX = pos[0];
+                }
+
+                if (pos[0] > maxX) {
+                    maxX = pos[0];
+                }
+
+                if (pos[1] < minY) {
+                    minY = pos[1];
+                }
+
+                if (pos[1] > maxY) {
+                    maxY = pos[1];
+                }   
+            }
+
+            /*if (path != null) {
+                for (int[] pos : path) {
+                    if (pos[0] < minX) {
+                        minX = pos[0];
+                    }
+
+                    if (pos[0] > maxX) {
+                        maxX = pos[0];
+                    }
+
+                    if (pos[1] < minY) {
+                        minY = pos[1];
+                    }
+
+                    if (pos[1] > maxY) {
+                        maxY = pos[1];
+                    }
+                }
+            }*/
+
+            int [] pos;
+            /*for (Node n : leftClosed.values()) {
+                pos = n.pos;
+                if (pos[0] < minX) {
+                    minX = pos[0];
+                }
+
+                if (pos[0] > maxX) {
+                    maxX = pos[0];
+                }
+
+                if (pos[1] < minY) {
+                    minY = pos[1];
+                }
+
+                if (pos[1] > maxY) {
+                    maxY = pos[1];
+                }
+            }
+
+            for (Node n : rightClosed.values()) {
+                pos = n.pos;
+                if (pos[0] < minX) {
+                    minX = pos[0];
+                }
+
+                if (pos[0] > maxX) {
+                    maxX = pos[0];
+                }
+
+                if (pos[1] < minY) {
+                    minY = pos[1];
+                }
+
+                if (pos[1] > maxY) {
+                    maxY = pos[1];
+                }
+            }*/
+
+            int diffX = maxX - minX;
+            int diffY = maxY - minY;
+
+            minX -= diffX + 5;
+            maxX += diffX + 5;
+            minY -= diffY + 5;
+            maxY += diffY + 5;
+
+            diffX = maxX - minX + 1;
+            diffY = maxY - minY + 1;
+
+            try {
+                int scale = 1, xadd, yadd;
+                while (diffX * scale < 1000 && diffY * scale < 1000) {
+                    scale <<= 1;
+                }
+                BufferedImage img = new BufferedImage(diffX * scale, diffY * scale, BufferedImage.TYPE_INT_RGB);
+                pos = new int[2];
+               
+                int color;
+                for (int y = 0; y < diffY; y++) {
+                    pos[1] = minY + y;
+                    for (int x = 0; x < diffX; x++) {
+                        pos[0] = minX + x;
+                        
+                        if (probe.apply(pos)) {
+                            color = COLOR_OBS;
+                        } else if (leftClosed.containsKey(getLongPos(pos))) {
+                            color = COLOR_LEFT;
+                        } else if (rightClosed.containsKey(getLongPos(pos))) {
+                            color = COLOR_RIGHT;
+                        } else {
+                            color = COLOR_EMPTY;
+                        }
+
+                       
+                        for (yadd = 0; yadd < scale; yadd++) {
+                            for (xadd = 0; xadd < scale; xadd++) {
+                                img.setRGB(scale * x + xadd, scale * y + yadd, color);
+                            }     
+                        }
+                        
+                        
+                    }
+                }
+
+                    if (path != null) {
+                        int x, y;
+                        for (int[] pathPos : path) {
+                            try {
+                                x = pathPos[0] - minX;
+                                y = pathPos[1] - minY;
+                                for (yadd = 0; yadd < scale; yadd++) {
+                                    for (xadd = 0; xadd < scale; xadd++) {
+                                        img.setRGB(scale * x + xadd, scale * y + yadd, COLOR_ROAD);
+                                    }     
+                                }
+                            } catch (Exception ex) {}
+                        }
+                    }
+                
+
+                this.img = img;
+            } catch (Exception ex) {
+                this.img = null;
+            }
+        }
+
+        @Override
+        public String toString() {
+            return Double.toString(pathLen);
+        }
+
+        /**
+         * Generates a .png image representing the nodes in the frontier and explored nodes (if present) (Green from start and Blue from end), as well as the optimal path (Red) if present.
+         *
+         * @param fname the name of the file to save the image to.
+         */
+        public void genImage(String fname) {
+           
+            if (img == null) {
+                return;
+            }
+
+            try {
+                ImageIO.write(img, "png",  new File(fname + ".png"));
+            } catch (Exception ex) {
+                ex.printStackTrace();
+            }
+        }
+
+        /**
+         * Generates a .csv file with all relevant search information.
+         *
+         * @param fname the name of the file to save the output data to.
+         */
+        public void genCSV(String fname) {
+            try {
+                FileWriter csvWriter = new FileWriter(fname + ".csv");
+
+                csvWriter.append("Basic Info Labels:, Basic Info: , , Path X, Path Y, , Left Depth, Left Nodes Explored, Right Depth, Right Nodes Explored,Time Taken (ms)\n");
+                int i = 0;
+                boolean tryNext = true;
+                int [] pos;
+                while(tryNext) {
+                    tryNext = false;
+                    if (i == 0) {
+                        csvWriter.append("Total Nodes Explored:, ");
+                        csvWriter.append(Long.toString(totalExplore));
+                        csvWriter.append(",");
+                        tryNext = true;
+
+                    } else if (i == 1) {
+                        csvWriter.append("Total Time Taken (ms):,");
+                        csvWriter.append(Long.toString(totalTime));
+                        csvWriter.append(",");
+                        tryNext = true;
+                    } else if (i == 2) {
+                        csvWriter.append("Optimal Path Length:,");
+                        csvWriter.append(Double.toString(pathLen));
+                        csvWriter.append(",");
+                        tryNext = true;
+                    } else {
+                        csvWriter.append(",,");
+                    }
+                    csvWriter.append(",");
+
+                    if (path != null && !path.isEmpty()) {
+                        pos = path.pollFirst();
+                        csvWriter.append(Integer.toString(pos[0]));
+                        csvWriter.append(",");
+                        csvWriter.append(Integer.toString(pos[1]));
+                        csvWriter.append(",");
+                        tryNext = true;
+                    } else {
+                        csvWriter.append(",,");
+                    }
+                    csvWriter.append(",");
+
+
+                    if (i < leftDepths.size()) {
+                        csvWriter.append(Double.toString(leftDepths.get(i)));
+                        csvWriter.append(",");
+                        csvWriter.append(Long.toString(leftExplored.get(i)));
+                        csvWriter.append(",");
+                        tryNext = true;
+                    } else {
+                        csvWriter.append(",,");
+                    }
+
+                    if (i < rightDepths.size()) {
+                        csvWriter.append(Double.toString(rightDepths.get(i)));
+                        csvWriter.append(",");
+                        csvWriter.append(Long.toString(rightExplored.get(i)));
+                        csvWriter.append(",");
+                        tryNext = true;
+                    } else {
+                        csvWriter.append(",,");
+                    }
+
+                    if (i < timeTaken.size()) {
+                        csvWriter.append(Long.toString(timeTaken.get(i)));
+                        tryNext = true;
+                    }
+
+
+                    csvWriter.append("\n");
+                    i++;
+                }
+
+                csvWriter.flush();
+                csvWriter.close();
+            } catch (Exception ex) {}
+        }
+
+        public void genFolder(String folderName) {
+            try {
+                new File(folderName).mkdirs();
+                String[] path = folderName.split("/");
+                String name = path[path.length - 1];
+                genCSV(folderName + "/" + name);
+                genImage(folderName + "/" + name);
+            } catch (Exception ex) {}
+        }
+
+    }
+
+
+    
+
+    /**
+    * A Data structure used to represent positions in the search space, with respect to their positions, h(n) and g(n) values, as well as their parent position.
+    */
+    public static class Node implements Comparable<Node>{
+        public Node parent;
+        public int[] pos;
+        public double gVal, hVal;
+        public long id;
+
+        /**
+         * 
+         * @param parent The parent node.
+         * @param pos   The position of this node.
+         * @param gVal  The travelled path length to get to the current position.
+         * @param hVal  The hueristic value of this node.
+         * @param id    A unique ID for the node. This is for comparison purposes.
+         */
+        public Node(Node parent, int[] pos, double gVal, double hVal, long id) {
+            this.parent = parent;
+            this.pos = pos;
+            this.gVal = gVal;
+            this.hVal = hVal;
+            this.id = id;
+        }
+
+        @Override
+        public int hashCode() {
+            int hash = 17;
+            hash = ((hash + pos[0]) << 5) - (hash + pos[0]);
+            hash = ((hash + pos[1]) << 5) - (hash + pos[1]);
+            return hash;
+        }
+
+        /**
+         * Nodes are compared firstly by their f values, then their h values and finally their IDs.
+         */
+        public int compareTo(Node o) {
+            if (this.gVal + this.hVal < o.gVal + o.hVal) {
+                return -1;
+            }
+
+            if (this.gVal + this.hVal > o.gVal + o.hVal) {
+                return 1;
+            }
+
+            if (this.hVal < o.hVal) {
+                return -1;
+            }
+
+            if (this.hVal > o.hVal) {
+                return 1;
+            }
+
+            if (this.id < o.id) {
+                return -1;
+            }
+
+            if (this.id > o.id) {
+                return 1;
+            }
+            
+
+            return 0;
+        }
+
+        /**
+         * @return Returns the node's position of two integers as a single long value. 
+         */
+        public long getLongPos() {
+            return (long) (((long)pos[0]) << 32) | (pos[1] & 0xffffffffL);
+        }
+
+    }
+
+   
+
+    private int[][] start;
+    private int[][] end;
+    private Function<int[], Boolean> probe;
+    private HashMap<Long, Node> leftClosed;
+    private HashMap<Long, Node> rightClosed;
+    private boolean leftOnlyRefine, rightOnlyRefine;
+    private double pathLen;
+    private Function5<Function<int[], Boolean>, int[], Node, int[][], int[][], Double> h1;
+    private Function5<Function<int[], Boolean>, int[], Node, int[][], int[][], Double> h2;
+    private long rollingID;
+    private Node middleFromLeft, middleFromRight;
+
+    /**
+     * Initializes the Lattice using a file that represents the maze. The file must contain the character '0' for empty spaces,
+     * and the maze need not be a square.
+     * 
+     * @param fname The name of the board file.
+     * @param start A two dimensional array containing any number of start points as [x, y]. Note top left of the board is [0, 0]
+     * @param end   A two dimensional array containing any number of end points as [x, y]. Note top left of the board is [0, 0]
+     */
+    public Lattice2D(String fname, int[][] start, int[][] end) {
+        try {
+            BufferedReader in = new BufferedReader(new FileReader(fname));
+            String line;
+            ArrayList<boolean[]> arrBoard = new ArrayList<boolean[]>();
+            
+            while((line = in.readLine()) != null) {
+                boolean[] row = new boolean[line.length()];
+                for (int i = 0; i < row.length; i++) {
+                    if (line.charAt(i) != '0') {
+                        row[i] = true;
+                    }
+                }
+                arrBoard.add(row);   
+            }
+            in.close();
+
+            Function<int[], Boolean> probe = (pos) -> {
+                if (pos[1] < 0 || pos[1] >= arrBoard.size()) {
+                    return true;
+                }
+    
+                if (pos[0] < 0 || pos[0] >= arrBoard.get(pos[1]).length) {
+                    return true;
+                }
+                return arrBoard.get(pos[1])[pos[0]];
+            };
+            
+            
+            initLattice(probe, start, end);
+
+        } catch (Exception ex) {
+            System.out.println("Error: Board File Could not be read in successfully, reverting to a completely blocked board.");
+            Function<int[], Boolean> probe = (pos) -> {
+                return true;
+            };
+            initLattice(probe , start, end);
+        }
+    }
+
+    /**
+     Initializes the Lattice using 2 Dimensional boolean array.
+
+     * @param board The two dimensional boolean array representing the lattice. False is empty and True is occupied.
+     * @param start A two dimensional array containing any number of start points as [x, y]. Note top left of the board is [0, 0]
+     * @param end A two dimensional array containing any number of end points as [x, y]. Note top left of the board is [0, 0]
+     */
+    public Lattice2D(boolean[][] board, int[][] start, int[][] end) {
+        Function<int[], Boolean> probe = (pos) -> {
+            if (pos[1] < 0 || pos[1] >= board.length) {
+                return true;
+            }
+
+            if (pos[0] < 0 || pos[0] >= board[pos[1]].length) {
+                return true;
+            }
+            return board[pos[1]][pos[0]];
+        };
+       initLattice(probe, start, end);
+    }
+
+    public Lattice2D (Function<int[], Boolean> probe, int[][] start, int[][] end) {
+        initLattice(probe, start, end);
+    }
+    
+    /**
+     * Initializes the Lattice programmatically.
+     * 
+     * @param probe A lambda function which takes a position [x, y] and returns True of False depending on whether the lattice is empty or occupied at that space.
+     *              False refers to empty space.
+     * @param start A two dimensional array containing any number of start points as [x, y].
+     * @param end   A two dimensional array containing any number of end points as [x, y].
+     */
+    private void initLattice (Function<int[], Boolean> probe, int[][] start, int[][] end) {
+        this.probe = probe;
+
+        System.out.println("Scrubbing Start and End Points:");
+        int validCount = 0;
+        for (int[] pos : start) {
+            if (probe.apply(pos)) {
+               System.out.println("Obstacle detected on [" + pos[0] + ", " + pos[1] + "]. Removing start location.");
+            } else {
+                validCount++;
+            }
+        }
+
+        if (validCount != start.length) {
+            int[][] newStart = new int[validCount][2];
+            int i = 0;
+            for (int[] pos : start) {
+                if (!probe.apply(pos)) {
+                    newStart[i][0] = pos[0];
+                    newStart[i][1] = pos[1];
+                    i++;
+                }
+            }
+            this.start = newStart;
+        } else {
+            this.start = start;
+        }
+        
+        validCount = 0;
+        for (int[] pos : end) {
+            if (probe.apply(pos)) {
+               System.out.println("Obstacle detected on [" + pos[0] + ", " + pos[1] + "]. Removing end location.");
+            } else {
+                validCount++;
+            }
+        }
+
+        if (validCount != end.length) {
+            int[][] newEnd = new int[validCount][2];
+            int i = 0;
+            for (int[] pos : end) {
+                if (!probe.apply(pos)) {
+                    newEnd[i][0] = pos[0];
+                    newEnd[i][1] = pos[1];
+                    i++;
+                }
+            }
+            this.end = newEnd;
+        } else {
+            this.end = end;
+        }
+        
+        System.out.println("Scrubbing Completed.\n");
+        
+    }
+
+
+
+    /**
+     * Generates all the valid neighbours of a Node.
+     * 
+     * @param node The node to expand.
+     * @param fromLeft Tells the function whether we are search from the forward (left) or backward (right) frontier.
+     */
+    private LinkedList<Node> genValidNeighbours(Node node, boolean fromLeft) {
+        
+        LinkedList<Node> neighbours = new LinkedList<Node>();
+        int[] parentPos = null;
+        double tempH = node.gVal + 1.0;
+        int[] pos;
+        if (node.parent != null) {
+            parentPos = node.parent.pos;
+        } else {
+            parentPos = null;   
+        }
+        for (int posDim = 0; posDim < 2; posDim++) {
+            for (int add = 1; add >= -1; add -= 2) {
+                pos = node.pos.clone();
+                pos[posDim] += add;
+                
+                //Skip if the space is occupied
+                if (probe.apply(pos)) {
+                    continue;
+                }
+
+                //Skip if we are trying to move into the node's parent position
+                if (parentPos != null) {
+                    if (pos[0] == parentPos[0] && pos[1] == parentPos[1]) {
+                        continue;
+                    }
+                }
+                
+                //Calculate h values
+                if (fromLeft) {
+                    tempH = h1.apply(probe, pos, node, start, end);
+                } else {
+                    tempH = h2.apply(probe, pos, node, end, start);
+                }
+                
+                //Add child node
+                if (tempH != Double.POSITIVE_INFINITY) {
+                    neighbours.add(new Node(node, pos, node.gVal + 1.0, tempH, rollingID++));
+                }
+                
+                    
+                
+            }
+        }
+        return neighbours;
+
+    }
+
+    /**
+     * Searches the lattice with a specific search method and hueristic(s).
+     *
+     * @param h1 the primary hueristic lambda function.
+     * @param h2 the secondary hueristic lambda function (used for the backwards search in Bi-Directional A*)
+     * @param searchType the search type to use, see class constants.
+     * @return a SearchResults data structure containing all the pertinent information regarding the search.
+     */
+    public SearchResults solve(Function5<Function<int[], Boolean>, int[], Node, int[][], int[][], Double> h1, Function5<Function<int[], Boolean>, int[], Node, int[][], int[][], Double> h2, int searchType) {
+        
+        this.h1 = h1;
+        this.h2 = h2;
+        rollingID = 0;
+        pathLen = Double.POSITIVE_INFINITY;
+        long leftExplore = 0, rightExplore = 0;
+        middleFromLeft = null;
+        middleFromRight = null;
+        leftClosed = new HashMap<Long, Node>();
+        rightClosed = new HashMap<Long, Node>();
+        leftOnlyRefine = false;
+        rightOnlyRefine = false;
+        ArrayList<Double> leftDepths = new ArrayList<Double>();
+        ArrayList<Double> rightDepths = new ArrayList<Double>();
+        ArrayList<Long> leftExplored = new ArrayList<Long>();
+        ArrayList<Long> rightExplored = new ArrayList<Long>();
+        ArrayList<Long> timeTaken = new ArrayList<Long>();
+
+        Node workingNode;
+        Node checkNode;
+        boolean allEmpty = true, run = false;
+        Instant startTime = Instant.now();
+        boolean oneStart = false, oneEnd = false;
+
+        for (int[] pos : start) {
+            if (!probe.apply(pos)) {
+                oneStart = true;
+                break;
+            }
+        }
+
+        for (int[] pos : end) {
+            if (!probe.apply(pos)) {
+                oneEnd = true;
+                break;
+            }
+        }        
+
+        run = oneStart && oneEnd;
+
+        //Iterative Deepening Searches
+        if (run && (searchType == SEARCH_TYPE_DFID || searchType == SEARCH_TYPE_ASID)) {
+            double leftCurrDepth = -1.0, leftNextDepth;
+            leftNextDepth = 0.0;
+            LinkedList<Node> leftOpen = new LinkedList<Node>();
+            if (searchType == SEARCH_TYPE_DFID) {
+                System.out.println("Running Depth First Iterative Deepening Search:");
+                this.h1 = (h1 = hNULL);
+            } else {
+                System.out.println("Running A* Iterative Deepening Search:");
+            }
+            Instant depthStart = (startTime = Instant.now());
+            while(run) {
+                if (allEmpty) {
+                    if (leftNextDepth == Double.POSITIVE_INFINITY) {
+                        break;
+                    }
+                    allEmpty = false;
+
+                    //Display information after a depth is fully searched
+                    if (!rightClosed.isEmpty()) {
+                        leftDepths.add(leftCurrDepth);
+                        leftExplored.add(leftExplore);
+                        long millTime = Duration.between(depthStart, Instant.now()).toMillis();
+                        timeTaken.add(Duration.between(depthStart, Instant.now()).toMillis());
+                        System.out.println("Depth: " + leftCurrDepth + " || Explored: " + leftExplore + " || Time(ms): " + millTime);
+                    }
+
+                    leftOpen.clear();
+                    leftClosed.clear();
+
+                    leftExplore = 0;
+                    leftCurrDepth = leftNextDepth;
+                    leftNextDepth = Double.POSITIVE_INFINITY;
+
+                    if (start.length == 0 || end.length == 0) {
+                        break;
+                    }
+                    
+                    //Add Start Points.
+                    Node newNode;
+                    for (int[] pos : start) {
+                        newNode = new Node(null, pos, 0, h1.apply(probe, pos, null, start, end), rollingID++);
+                        leftOpen.add(newNode);
+                        leftClosed.put(newNode.getLongPos(), newNode);
+                    }
+                    
+                    //Initially, add all the End Points to the right explored set (This is never updated, but merely used to check if an end point is reached).
+                    if (rightClosed.isEmpty()) {
+                        for (int[] pos : end) {
+                            newNode = new Node(null, pos, 0, 0, rollingID++);
+                            if ((checkNode = leftClosed.get(newNode.getLongPos())) != null) {
+                                middleFromLeft = checkNode;
+                                middleFromRight = newNode;
+                                pathLen = 0.0;
+                                run = false;
+                                break;
+                            }
+                            rightClosed.put(newNode.getLongPos(), newNode);
+                        }
+                        if (!run) {
+                            break;
+                        }
+                    }
+    
+                    depthStart = Instant.now();
+                    
+                }
+                    
+            
+                if ((workingNode = leftOpen.pollLast()) == null) {
+                    allEmpty = true;
+                } else if ((checkNode = leftClosed.get(workingNode.getLongPos())) != null && workingNode == checkNode) {
+                    leftClosed.remove(workingNode.getLongPos());
+                    leftExplore++;
+                    for (Node newNode : genValidNeighbours(workingNode, true)) {
+                        if (newNode.gVal + Math.ceil(newNode.hVal) <= leftCurrDepth) {
+                            //Check if a the position is an end point.
+                            if ((checkNode = rightClosed.get(newNode.getLongPos())) != null) {
+                                pathLen = newNode.gVal;
+                                middleFromLeft = newNode;
+                                middleFromRight = checkNode;
+                                run = false;
+                                leftOpen.clear();
+                                break;
+                            //Check if we should re-expand a node or not.
+                            } else if (((checkNode = leftClosed.get(newNode.getLongPos())) == null) || (newNode.gVal < checkNode.gVal)) {
+                                
+                                leftOpen.add(newNode);
+                                leftClosed.put(newNode.getLongPos(), newNode);
+                            }
+                        //Find the next minimum integer depth.
+                        } else if (newNode.gVal + Math.ceil(newNode.hVal) < leftNextDepth) {
+                           
+                            leftNextDepth = newNode.gVal + Math.ceil(newNode.hVal);
+                        }
+                    }
+                        
+
+                }
+                
+               
+            }
+
+            timeTaken.add(Duration.between(depthStart, Instant.now()).toMillis());
+            leftDepths.add(leftCurrDepth);
+            leftExplored.add(leftExplore);
+        
+        // Tree-Graph Searches
+        } else if (run && (searchType == SEARCH_TYPE_AS || searchType == SEARCH_TYPE_BDAS)) {
+            if (searchType == SEARCH_TYPE_AS) {
+                System.out.println("Running A*:");
+            } else {
+                System.out.println("Running Bi-Directional A*:");
+            }
+            TreeSet<Node> leftOpen = new TreeSet<Node>();
+            TreeSet<Node> rightOpen = new TreeSet<Node>();
+
+            startTime = Instant.now();
+            if (start.length == 0 || end.length == 0) {
+                run = false;
+            } else {
+                //Add Start Positions.
+                for (int[] pos : start) {
+                    Node newNode = new Node(null, pos, 0, h1.apply(probe, pos, null , start, end), rollingID++);
+                    leftOpen.add(newNode);
+                    leftClosed.put(newNode.getLongPos(), newNode);
+                }
+                //Add End Positions.
+                for (int[] pos : end) {
+                    Node newNode;
+                    if (searchType == SEARCH_TYPE_BDAS) {
+                        newNode = new Node(null, pos, 0, h2.apply(probe, pos, null, end, start), rollingID++);
+                    } else {
+                        newNode = new Node(null, pos, 0, 0, rollingID++);
+                    }
+                    if ((checkNode = leftClosed.get(newNode.getLongPos())) != null) {
+                        middleFromLeft = checkNode;
+                        middleFromRight = newNode;
+                        pathLen = 0.0;
+                        run = false;
+                        break;
+                    }
+                    if (searchType == SEARCH_TYPE_BDAS) {
+                        rightOpen.add(newNode);
+                    }
+                    rightClosed.put(newNode.getLongPos(), newNode);
+                }
+            }
+            allEmpty = false;
+            while(run && !allEmpty) {
+            
+                //Forward searching (left) frontier
+                if ((workingNode = leftOpen.pollFirst()) == null) {
+                    //If this Open set is empty and we have found no path yet, no path exists.
+                    if (pathLen == Double.POSITIVE_INFINITY) {
+                        break;
+                    }
+                    allEmpty = true;
+                } else if (workingNode.gVal + Math.ceil(workingNode.hVal) < pathLen) {
+                    
+                    if ((checkNode = leftClosed.get(workingNode.getLongPos())) != null && workingNode == checkNode) {
+                        leftExplore++;
+                        for (Node newNode : genValidNeighbours(workingNode, true)) {
+                            //Check if the optimal path length can be updated.  
+                            if (newNode.gVal + Math.ceil(newNode.hVal) < pathLen) {
+                                //Check if the current position is an End Point.
+                                if ((checkNode = rightClosed.get(newNode.getLongPos())) != null) {
+                                    if (newNode.gVal + checkNode.gVal < pathLen) {
+                                        pathLen = newNode.gVal + checkNode.gVal;
+                                        middleFromLeft = newNode;
+                                        middleFromRight = checkNode;
+                                        rightOnlyRefine = true;
+                                    }
+                                } else if (!((checkNode = leftClosed.get(newNode.getLongPos())) == null && leftOnlyRefine)) {
+                                    //If the current position was already explored, see if it can be improved.
+                                    if (checkNode != null) {
+                                        if (newNode.gVal < checkNode.gVal) {
+                                            leftOpen.remove(checkNode);
+                                        } else {
+                                            continue;
+                                        }
+                                    }
+                                    leftOpen.add(newNode);
+                                    leftClosed.put(newNode.getLongPos(), newNode);
+                                }
+                                
+                            }
+                        }
+                    }
+                    
+                } else {
+                    allEmpty = true;
+                    rightOnlyRefine = true;
+                    leftOpen.clear();
+                }
+                
+                //Backward searching (right) frontier.
+                if (searchType == SEARCH_TYPE_BDAS) {
+                    if ((workingNode = rightOpen.pollFirst()) == null) {
+                        //If this Open set is empty and we have found no path yet, no path exists.
+                        if (pathLen == Double.POSITIVE_INFINITY) {
+                            break;
+                        }
+                    } else if (workingNode.gVal + Math.ceil(workingNode.hVal) < pathLen) {
+
+                        if ((checkNode = rightClosed.get(workingNode.getLongPos())) != null && workingNode == checkNode) {
+                            rightExplore++;    
+                            for (Node newNode : genValidNeighbours(workingNode, false)) {
+                                //Check if the optimal path length can be updated.
+                                if (newNode.gVal + Math.ceil(newNode.hVal) < pathLen) {
+                                    //Check if the current position is a Start Point.
+                                    if ((checkNode = leftClosed.get(newNode.getLongPos())) != null) {
+                                        if (newNode.gVal + checkNode.gVal < pathLen) {
+                                            pathLen = newNode.gVal + checkNode.gVal;
+                                            middleFromLeft = checkNode;
+                                            middleFromRight = newNode;
+                                            rightOnlyRefine = true;
+                                        }
+                                    } else if (!((checkNode = rightClosed.get(newNode.getLongPos())) == null && rightOnlyRefine)) {
+                                        //If the current position was already explored, see if it can be improved.
+                                        if (checkNode != null) {
+                                            if (newNode.gVal < checkNode.gVal) {
+                                                rightOpen.remove(checkNode);
+                                            } else {
+                                                continue;
+                                            }
+                                        }
+                                        rightOpen.add(newNode);
+                                        rightClosed.put(newNode.getLongPos(), newNode);
+                                        
+                                    }
+                                    
+                                }
+                            }
+                        }
+                        
+                    } else {
+                        leftOnlyRefine = true;
+                        rightOpen.clear();
+                    }
+                }
+            }
+            Instant finishTime = Instant.now();
+            timeTaken.add(Duration.between(startTime, finishTime).toMillis());
+
+            leftDepths.add(Double.POSITIVE_INFINITY);
+            leftExplored.add(leftExplore);
+            if (searchType == SEARCH_TYPE_BDAS) {
+                rightDepths.add(Double.POSITIVE_INFINITY);
+                rightExplored.add(rightExplore);
+            }
+        }
+
+        
+        
+        //Generate the optimal path if it exists.
+        LinkedList<int[]> path;
+        if (pathLen < Double.POSITIVE_INFINITY) {
+            path = new LinkedList<int[]>();
+            while (middleFromLeft != null) {
+                path.addFirst(middleFromLeft.pos);
+                middleFromLeft = middleFromLeft.parent;
+            }
+
+            middleFromRight = middleFromRight.parent;
+            while (middleFromRight != null) {
+                path.addLast(middleFromRight.pos);
+                middleFromRight = middleFromRight.parent;
+            }
+        } else {
+            path = null;
+        }
+
+        //Calculate Results and return
+        SearchResults ret = new SearchResults(probe, start, end, path, pathLen, leftClosed, rightClosed, leftDepths, rightDepths, leftExplored, rightExplored, timeTaken);
+        System.out.println("Search Completed: Optimal Path Length: " + Double.toString(pathLen) + " || Total Nodes Explored: " + ret.totalExplore + " || Time(ms): " + ret.totalTime + "\n");
+        this.h1 = null;
+        this.h2 = null;
+        this.leftClosed = null;
+        this.rightClosed = null;
+        return ret;
+    }
+
+
 
 }

@@ -1,0 +1,398 @@
+\documentclass[conference]{IEEEtran}
+\IEEEoverridecommandlockouts
+% The preceding line is only needed to identify funding in the first footnote. If that is unneeded, please comment it out.
+\usepackage{cite}
+\usepackage{amsmath,amssymb,amsfonts}
+\usepackage{graphicx}
+\usepackage{textcomp}
+\usepackage{xcolor}
+\usepackage{subcaption}
+\usepackage{float}
+\usepackage[a4paper, portrait, margin=25pt]{geometry}
+\usepackage{hyperref}
+\hypersetup{
+    colorlinks=true,
+    linkcolor=blue,
+    filecolor=magenta,      
+    urlcolor=cyan,
+}
+\def\BibTeX{{\rm B\kern-.05em{\sc i\kern-.025em b}\kern-.08em
+    T\kern-.1667em\lower.7ex\hbox{E}\kern-.125emX}}
+\begin{document}
+
+\title{A Report on Optimal Path Finding and Performance Enhancements on 2D Lattices using A*}
+
+\author{\IEEEauthorblockN{1\textsuperscript{st} Christoff van Zyl}
+\IEEEauthorblockA{\textit{Honors Computer Science} \\
+\textit{Stellenbosch University}\\
+Stellenbosch, South Africa \\
+20072015@sun.ac.za}
+}
+
+\maketitle
+
+\section{Functionality Checklist}
+\textbf{Core:}
+\begin{itemize}
+    \item Reading in a lattice using a grid map of ones and zeros.
+    \item Reporting mechanisms integrated into algorithms.
+    \item Depth-First Iterative Deepening.
+    \item A* , Iterative Deepening A* and Bi-Directional A*.
+    \item Various heuristics, including Dijkstra.
+\end{itemize}
+
+\textbf{Extended:}
+\begin{itemize}
+    \item Creating a lattice programmatically. This implies infinite lattices and non-rectangular lattices.
+    \item Visualization mechanism integrated into algorithms.
+    \item Optimizations on positional comparison.
+    \item Optimal path guarantee for admissible heuristics.
+    \item Multiple start and end points.
+\end{itemize}
+
+\section{Definitions}
+\begin{itemize}
+    \item Position : A two-dimensional position on the lattice.
+    \item Path length ($g(n)$) : A function representing the distance which was travelled on the lattice to reach node $n$.
+     \item Heuristic function ($h(n)$) : A function representing an estimate of the distance a node $n$ will need to travel still in order to reach a goal position.
+     \item Cost Function ($f(n)$) : A function representing an estimate of the total path length to the goal. Mathematically: $f(n) = g(n) + h(n)$.
+    \item Node ($n$) : An element inside the search space. It is uniquely described by a position, a current path length ($g(n)$), a heuristic function value ($h(n)$) and parent node ($n_p$).
+    \item Open Set ($\mathbf{OPEN}$) : The ordered set of nodes representing the search frontier or open set.
+    \item Closed Set ($\mathbf{CLOSED}$) : The set of nodes representing all explored nodes.
+    \item Expand : The act of moving a node from $\mathbf{OPEN}$ to $\mathbf{CLOSED}$ and adding all of its valid children to $\mathbf{OPEN}$.
+    \item Dijkstra Heuristic: Refers to the uniform cost heuristic that allows A* to function in a similar manner as a Dijkstra graph search, with $h(n) = 0$.
+    \item Straight Line Distance (SLD) Heuristic : This heuristic returns the Euclidean distance between the current position and the goal ($k$) , hence: 
+    \[h(n) = \sqrt{(k_x - n_x)^2 + (k_y - n_y)^2}\]
+    \item Manhattan Heuristic : This heuristic returns the sum of the difference in the $x$ and $y$ directions:
+    \[h(n) = abs(k_x - n_x) + abs(k_y - n_y) \]
+\end{itemize}
+
+
+
+\section{Implementation and Performance Enhancements}
+
+\subsection{Language and Libraries}
+Java was used as the language of implementation. Furthermore an open source \href{https://gist.github.com/KdotJPG/b1270127455a94ac5d19}{OpenSimplex noise library} was used to create most of the problem sets.
+
+\subsection{Design Decisions}
+The algorithms described here were written in such a way as to guarantee optimal path finding and the report also evolves around optimal path finding. This implies that whenever a heuristic is mentioned, it can be assumed to be at least admissible. Furthermore many optimizations were done which relies heavily on the geometry of a 2-D lattice, such as backtracking always leading to worse paths, and that any path from a starting position to an end position is guaranteed to be an integer. Furthermore although the report does focus on small cases for iterative deepening, the algorithms were designed with scale in mind, thus large lattices will be used for the most part in order to investigate the general behaviour of the algorithms and heuristics on a large scale.
+
+\subsection{$\mathbf{OPEN}$ and $\mathbf{CLOSED}$ efficient implementation}
+\label{openclosed}
+For Graph searches that are not iterative deepening, literature on A* usually defines $\mathbf{OPEN}$ and $\mathbf{CLOSED}$ as two mutually exclusive sets, with nodes in $\mathbf{OPEN}$ adhering to the order: $n < n' \iff f(n) < f(n')$. $\mathbf{OPEN}$ is also guaranteed to contain only nodes that represent unique positions on the lattice. Whilst this works well in theory, programmatically it is difficult to keep a single ordered structure which allows ordering by one metric ($f(n)$) and searching by another (position) with both operations having $\mathcal{O}(log(|\mathbf{OPEN}|))$ worst case performance. One solution is to divide these expectations up by introducing $\mathbf{OPEN_1}$ that allows for searching with respect to node positions in $\mathcal{O}(1)$ time and $\mathbf{OPEN_2}$ that is ordered with respect to $f(n)$ and uses $\mathcal{O}(log(|\mathbf{OPEN_2}|))$ time for its operations. The following actions are then modified as described:
+\begin{enumerate}
+\label{modSteps}
+    \item \textbf{Expanding a node $n$:} Remove the smallest node $n$ from $\mathbf{OPEN_2}$ (removing it from $\mathbf{OPEN_1}$ as well via a search on $n$'s position) and find all its valid children ($\mathbf{n'}$).
+    \item \textbf{Check the closed set :} Given a child node $n'$ only continue to the next step if $\mathbf{CLOSED}$ does not contain $'n$.
+    \item \textbf{Inserting a new node $n'$:} Check if $\mathbf{OPEN_1}$ contains a node at the same position, call it $n_k$ if it exists. If it exists, and $f(n') < f(n_k)$, remove $n_k$ from all three sets using appropriate searches. Finally add $n'$ to all three sets using appropriate searches.
+\end{enumerate}
+This guarantees $\mathcal{O}(log(|\mathbf{OPEN_2}|))$ worst case time complexity during the process of expanding any node. For the current implementation $\mathbf{OPEN_1}$ and $\mathbf{CLOSED}$ are implemented as \href{https://docs.oracle.com/javase/8/docs/api/java/util/HashMap.html}{Hash Tables} and $\mathbf{OPEN_2}$ as  \href{https://docs.oracle.com/javase/7/docs/api/java/util/LinkedList.html}{Linked Lists} for iterative deepening and  \href{https://docs.oracle.com/javase/10/docs/api/java/util/TreeSet.html}{Tree Sets} otherwise.
+
+\subsection{Optimal Path Guarantees}
+Given an admissible heuristic $h(n)$, which is not consistent, it is possible for the heuristic to return non-optimal paths in a graph search, as can be seen from Figure \ref{fig:NonConsistent} on the left. Here the heuristic uses Manhattan distances or Uniform Cost depending which path is taken. Two steps can be taken to amend this. Firstly let  $\mathbf{SEEN} =  \mathbf{CLOSED} \cup \mathbf{OPEN_2} $ and replace all actions involving either $\mathbf{CLOSED}$ or $\mathbf{OPEN_2}$ with $\mathbf{SEEN}$ in \ref{modSteps}, making the second action redundant. For the second step, since $f(n)$ from the Uniform Cost path at the incident location is still smaller than that of the Manhattan path, we amend action three in \ref{modSteps} to compare using $g(n)$ instead of $f(n)$. This leads to the optimal path on as can be seen on the right in Figure \ref{fig:NonConsistent}. This does however prevent the algorithm from being a pure graph search for inconsistent heuristics and in such cases turns it into a hybrid between a graph search and a tree search. It is also important to note that this is not a general fix for inconsistent heuristics and relies heavily on the geometry of 2-D Lattices, namely that given two $g$ values for the same position, the smaller one guarantees a shorter path to the goal if it exists.
+
+\subsection{Bi-Directional Refinement}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.30\textwidth]{FrontiersUpdate.png}
+    \caption{Uniform cost heuristic leading to non-optimal path if the stopping condition is the minimum $f$ in either frontier is less than current path length as opposed to both if the frontiers do not cross each other.}    
+    \label{fig:NoCross}
+\end{figure}
+For Bi-Directional searches the stopping condition requires the minimum $f$ value for a node in \textbf{both}, assuming we do not allow the frontiers to cross (see Fig~\ref{fig:NoCross}) , the forward and backward frontiers be at least equal to the length of the current shortest path to the goal (assume an initial path length of $\infty$). Most literature suggests that both the forward and backward direction needs to keep being explored until the condition is met. Assuming that both directions are searched concurrently or alternately until the frontier meets for the first time, the condition can be met by having one frontier having a minimum $f$ value at least equal to the path length, and the second frontier guaranteeing that it will not update its frontier nodes. This implies that all nodes in the second frontier represent the shortest possible paths to reach their respective positions. This can be accomplished by continuing to run both frontiers but prevent one of them from expanding, and only allow that one to refine its current frontier. This allows the non-expanding frontier to explore less, leading to an overall decrease in the amount of nodes we need to explore, see Table \ref{tab:Refinement}. We see a median of about a 13\% less nodes that requires expanding. It is also visualized in Fig~\ref{fig:RefineEffects} with the SLD (Straight Line Distance) heuristic (A full comparison that includes Dijkstra and Manhattan is found in Fig~\ref{fig:HardNoise}).
+
+\begin{table}[H]
+\begin{tabular}{lll}
+Algorithm       & Nodes Explored & Nodes Explored (refined)     \\
+Manhattan       & 632513       & 545966  \\
+Dijkstra        & 6526889       & 4590687 \\
+SLD             & 1314865       &  1020939
+
+\end{tabular}
+\caption{Total nodes explored on in Bi-Directional search with and without the refinement mechanism.}
+\label{tab:Refinement}
+\end{table}
+
+\begin{figure}[H]
+    \centering
+     \includegraphics[width=0.23\textwidth]{HardNoise/BDAS_SLD_HardNoise.png}
+     \includegraphics[width=0.23\textwidth]{NoRefine/BDAS_SLD_HardNoise.png}
+    \caption{Effects of refinement on Bi-Directional Search (left is refined, right is not).}    
+    \label{fig:RefineEffects}
+\end{figure}
+
+
+
+\section{Results}
+
+\subsection{Iterative Deepening Algorithms}
+Iterative deepening search, although having virtually no memory footprint, does suffer from an exponential growth in the nodes it explores with each depth, as can be seen from Table \ref{tab:NE}. This forces heuristic functions to be extremely well calibrated to the problem at hand, in order to minimize the branching factor, whilst also retaining a large granularity to minimize the amount of unique depth levels in $f(n)$ that needs to be explored before the goal is reached. We can clearly see this effect by comparing Depth-First ID (Iterative Deepening) and A* Manhattan ID. Whilst the former has the smallest branching factor, it much more depths to be explored since it has $f(n) = g(n)$, as opposed to the latter. The results for A* SLD (Straight Line Distance) ID is also shown, which might cause confusion as it is an extremely granular heuristic. The reason it provides good results is due to another optimization of the algorithms which relies on the geometry of the problem. Given any non-integer admissible heuristic value, we can guarantee that the remaining distance to any goal is at least as big as its ceiling. Therefore, when comparing the $f(n)$ values of nodes to the current path length, as well as the current depth, and when computing the next depth, the algorithms use $\lceil f(n) \rceil$ instead. Nodes inside the frontiers are however still compared to each other without alterations.
+
+\begin{table}[ht]
+\begin{tabular}{llll}
+Algorithm           & Nodes Explored    &  Branching Factor & Depths Explored \\
+Depth-First ID      & 304362523         & 1.76                      & 34\\
+A* SLD ID           & 22252             & 1.91                      & 15\\
+A* Manhattan ID     & 5517              & 7.83                      & 5 \\
+A* Dijkstra         & 829               & -                         & - \\
+
+\end{tabular}
+\caption{Total nodes explored and branching factor on an easy noise generated lattice (see Fig~\ref{fig:EasyNoise}) by different algorithms and heuristics.}
+\label{tab:NE}
+\end{table}
+
+\par
+It is clear that even for small cases, such as this where the minimum path length is only $34$, that poor heuristic functions explores several orders of magnitude more nodes in its iterative deepening version compared to its non-iterative deepening version or to more finely calibrated or dominating heuristics. The prime example of this here is Depth-First ID compared to A* Dijkstra, both of which use $h(n) = 0$. Furthermore to show iterative deepening algorithms' lack of scalability due to their exponential growth in nodes explored each depth, the dominating heuristic was used on the same maze but with the goal shifted a bit further away such that the minimum path length is $65$. The results are tabulated in Table \ref{tab:NM}.
+
+\begin{table}[ht]
+\begin{tabular}{ll}
+Algorithm           & Nodes Explored     \\
+A* Manhattan ID     & 140560035         \\
+A* Dijkstra         & 3547               \\
+A* SLD              & 597               \\
+A* Manhattan        & 282               \\
+
+\end{tabular}
+\caption{Total nodes explored on a medium lattice.}
+\label{tab:NM}
+\end{table}
+
+\subsection{A* vs Bi-Directional A* for Optimal Path Finding}
+
+\begin{table}[ht]
+\begin{tabular}{ll}
+Algorithm           & Nodes Explored     \\
+BD A* Dijkstra      & 4253180         \\
+A* Dijkstra         & 3734959               \\
+BD A* SLD           & 938376             \\
+A* SLD              & 851926               \\
+BD A* Manhattan     & 491525               \\
+A* Manhattan        & 470850               \\
+
+\end{tabular}
+\caption{Total nodes explored on a large lattice.}
+\label{tab:BN}
+\end{table}
+
+Table \ref{tab:BN} represents the total amount of nodes explored by several algorithms on a large lattice. It is clear that Bi-Directional A* does not provide the expected performance increase over A* on these types of lattices with respect to optimal path finding. The reason for this appears to lie with the fact that the heuristics does not account for the obstacles in the lattice, thereby severely underestimating the distance to the goal for nodes far away from the goal, such that a significant amount of search still needs occur after the frontiers meet in order to guarantee optimality of the path. This allows for both the forward and backwards frontiers to be expanded in the wrong directions and still provide $f$ values lower than the current path length. This effect can be observed in Fig~\ref{fig:BDWrongDir}. Notice how the forward frontiers have similar explored area, however, the backwards frontier searches in the wrong direction as well. This leads to the slight increase in nodes explored by similar heuristics in their Bi-Directional versions.
+
+\begin{figure}[ht]
+    \centering
+     \includegraphics[width=0.23\textwidth]{BigObs/BDAS_SLD_BigObstacleNoise.png}
+     \includegraphics[width=0.23\textwidth]{BigObs/AS_SLD_BigObstacleNoise.png}
+    \caption{Bi-Directional A* expansion (left) vs A* expansion (right) }    
+    \label{fig:BDWrongDir}
+\end{figure}
+
+\subsection{Heuristic Comparison}
+By looking at Tables \ref{tab:NE} and \ref{tab:BN} once more it is easy to determine a clear order in the effectiveness of the three heuristics. Dijkstra, which makes no attempt at estimating the distance to the goal, performs worst overall, with the straight line distance being the intermediate heuristic and the Manhattan distance heuristic performing best overall. This does not prove, but strengthens the general notion that if one heuristic dominates another, one can in general expect better performance from the dominating heuristic.
+
+\begin{figure}[ht]
+    \centering
+    \begin{subfigure}{.23\textwidth}
+        \includegraphics[width=\textwidth]{BigObs/BDAS_DIJK_BigObstacleNoise.png}
+        \caption{Bi-Directional Dijkstra}
+    \end{subfigure} \hfill
+    \begin{subfigure}{.23\textwidth}
+        \includegraphics[width=\textwidth]{BigObs/AS_DIJK_BigObstacleNoise.png}
+        \caption{Dijkstra}
+    \end{subfigure} \hfill
+    \begin{subfigure}{.23\textwidth}
+        \includegraphics[width=\textwidth]{BigObs/BDAS_SLD_BigObstacleNoise.png}
+        \caption{Bi-Directional SLD}
+    \end{subfigure} \hfill
+     \begin{subfigure}{.23\textwidth}
+        \includegraphics[width=\textwidth]{BigObs/AS_SLD_BigObstacleNoise.png}
+        \caption{SLD}
+    \end{subfigure} \hfill
+    \begin{subfigure}{.23\textwidth}
+        \includegraphics[width=\textwidth]{BigObs/BDAS_MH_BigObstacleNoise.png}
+        \caption{Bi-Directional Manhattan}
+    \end{subfigure} \hfill
+    \begin{subfigure}{.23\textwidth}
+        \includegraphics[width=\textwidth]{BigObs/AS_MH_BigObstacleNoise.png}
+        \caption{Manhattan}
+    \end{subfigure} \hfill
+    \caption{Bi-Directional A* and A* large lattice exploration visualizations}    
+    \label{fig:BO}
+\end{figure}
+
+\par Using Fig~\ref{fig:BO} it is easy to see these effects in action. Starting with Dijkstra, one can clearly see the effect of the heuristic not respecting moving towards the general direction of the goal, and due to this does not direct the search towards the goal.The straight line distance heuristic already significantly improves on Dijkstra by providing a general direction for the algorithm to search towards, however due to it severely underestimating the distance to the goal at positions diagonal to the goal, it allows the algorithm to search in these areas for too long before moving on to more favourable regions. The Manhattan distance heuristic overcomes this by taking the geometry of the problem into account (positions diagonal to the goal give large heuristic values) and is thereby able to create the tightest search of all three heuristics.
+
+\subsection{Smart Heuristics}
+\label{SmartHeuristics}
+
+
+The heuristics dealt with thus far do not incorporate any information regarding the obstacles in the environment, relying only on the goal position to estimate the heuristic. This is useful since usually it is impossible to make guarantees regarding any region of a problem beforehand. If this is allowed however, and some, but not all information regarding a problem is known beforehand, it is possible to construct heuristics which incorporate this information. Suppose we know of a big obstacle in the lattice or environment, such as on the left of Fig~\ref{fig:SmartH}.
+
+\begin{figure}[H]
+    \centering
+     \includegraphics[width=0.23\textwidth]{SmartHeuristic/AS_MH_BigObstacleNoise.png}
+     \includegraphics[width=0.23\textwidth]{SmartHeuristic/AS_MHSmart_BigObstacleNoise.png}
+    \caption{Manhattan heuristic without (left) and with (right) environment specific knowledge}    
+    \label{fig:SmartH}
+\end{figure}
+
+\par Here there exists a noisy lattice, and big bucket in the middle of the maze. By allowing a core Manhattan heuristic to be aware of the bucket, but not the noise of the lattice, it is able to significantly decrease the area it explores in order to find the goal. Approaches like these, which incorporate some large consistent features of the environment into the heuristic, whilst leaving the more granular inconsistent features up to the algorithm itself, can lead to a significant decrease in the amount of nodes expanded during the search.
+
+\begin{figure}[H]
+    \centering
+     \includegraphics[width=0.23\textwidth]{NookTest/AS_MH_NOOK.png}
+     \includegraphics[width=0.23\textwidth]{NookTest/AS_MHNook_NOOK.png}
+    \caption{Manhattan heuristic without (left) and with (right) nook and cranny filtering}    
+    \label{fig:SmartNook}
+\end{figure}
+
+\par Heuristics can also use environmental knowledge without caching. One such example of this is using boundary detection to find nook or cranny in the direction the node is moving towards (the direction opposing its parent). Then, by using \href{https://en.wikipedia.org/wiki/Winding_number}{Winding Numbers}, if it is found that the goal does not lie within the nook or cranny, the heuristic returns a special value (in this case $\infty$ ), which tells the algorithm to ignore the position entirely. The effects of this can be seen in Fig~\ref{fig:SmartNook}. Whilst this does significantly decrease the amount nodes having to be explored, it also carries a significant computational overhead for each node. This overhead is constant however, implying that these sorts of computational expensive constant cost heuristics might be useful for iterative deepening algorithms.
+
+\begin{table}[H]
+\begin{tabular}{lll}
+$f$ Depth           &  Nodes Explored   & Time Taken (ms) \\
+0                 & 1                 & 0             \\
+59                 & 1517                 & 8             \\
+61                 & 26314                 & 62             \\
+63                 & 888752                & 630             \\
+65                  & 31213495              & 18430
+\end{tabular}
+\caption{Manhattan Iterative Deepening (completed depths)}
+\label{tab:NookMH}
+\end{table}
+
+\begin{table}[H]
+\begin{tabular}{lll}
+$f$ Depth           &  Nodes Explored   & Time Taken (ms) \\
+0                 & 1                 & 1             \\
+59                 & 105                 & 7             \\
+61                 & 261                 & 12             \\
+63                 & 16667                & 635             \\
+65                  & 165873              & 6274
+\end{tabular}
+\caption{Manhattan Iterative Deepening with nook and cranny pruning (completed depths)}
+\label{tab:NookMHNook}
+\end{table}
+
+\par By using a modified version of the previous problem (see Fig~\ref{fig:ModNook} for the the respective non-iterative A* results for the two heuristics), this can be shown experimentally. Tables \ref{tab:NookMH} and \ref{tab:NookMHNook} presents the results by using iterative deepening for both heuristics. Although Manhattan with nook and cranny filtering is computionally about fifty times more expensive than normal Manhattan, it is quickly paid for by the reduction in the average branching factor, This leads to a reduction in the nodes having to be explored at depth $f = 65$ by a factor of almost $200$, and leading to an overall faster algorithm.
+
+\subsection{A new definition of Admissibility}
+In \ref{SmartHeuristics} a heuristic is described which technically does not adhere to admissibility, since it has to possibility to return $\infty$ even a goal is reachable in a finite amount of steps from that position. However it does guarantee admissibility for any path which has the potential to be an optimal path. This suggests that it might be possible to formulate a proof of the intuitive, albeit perhaps naive, conclusion that we can guarantee all the properties of an admissible heuristic (at the very least with respect to Tree search) if the heuristic can guarantee admissibility on at least one optimal path. Stated alternatively, $h(n)$ should be admissible for all nodes $n$ on that path. The proof of this was not attempted for the purpose of this report, only its possible existence noted.
+
+\section{Conclusion}
+It is clear that Iterative Deepening methods, although having virtually no memory footprint, fails to finds paths in reasonable time for all but the very smallest of lattices. This effect however might be due to the heuristics not being properly calibrated to the problem at hand, thereby increasing either or both the branching factor as well as the amount of depths that needs to be searched through in order to find the goal. It was also found that by using appropriate calibrations (see \ref{SmartHeuristics}) for the heuristics, that the effective time consumption of these algorithms can be reduced exponentially for each consecutive depth. Furthermore, although A* literature expects Bi-Directional searches to outperform A* in most cases, it was found that although this might be possible finding a path, given even a moderately noisy lattice with heuristics that underestimate the remaining distance to the goal severely, that Bi-Directional A* is always outperformed by A* with respect to optimal path finding. It was also shown that in general a dominating heuristic will expand less nodes in order to reach a goal. This was clearly observed in Fig~\ref{fig:BO} where Manhattan which dominates SLD, which in turn dominates Dijkstra have performance orders matching their domination orders. Finally it was suggested that the requirements for admissibility could potentially be relaxed somewhat without sacrificing any guarantees with respect to optimal path finding.
+
+\section{References}
+Although no additional official material was consulted, except for the material available on the \href{https://computer-science.pages.cs.sun.ac.za/search/website/#week-2}{course website}, a significant amount of forums and web pages was scoured for inspiration and ideas.
+
+\newpage
+
+\appendices
+
+\section{Figures} 
+\label{AppendixFigs}
+
+\begin{figure*}[h]
+    \centering
+    \begin{subfigure}{.29\textwidth}
+        \includegraphics[width=\textwidth]{EasyNoise/AS_DIJK_EasyNoise.png}
+        \caption{Dijkstra (Uniform Cost)}
+        \label{fig:EN_DIJK}
+    \end{subfigure} \hfill
+    \begin{subfigure}{.29\textwidth}
+        \includegraphics[width=\textwidth]{EasyNoise/AS_MH_EasyNoise.png}
+        \caption{Manhattan}
+        \label{fig:EN_MH}
+    \end{subfigure} \hfill
+    \begin{subfigure}{.29\textwidth}
+        \includegraphics[width=\textwidth]{EasyNoise/BDAS_MH_EasyNoise.png}
+        \caption{Bi-Directional Manhattan}
+        \label{fig:EN_BMH}
+    \end{subfigure} \hfill
+  
+    \caption{Sparse Maze Search Results Visualization}    
+    \label{fig:EasyNoise}
+\end{figure*}
+
+\begin{figure*}[h]
+    \centering
+    \begin{subfigure}{.45\textwidth}
+        \includegraphics[width=\textwidth]{ModifiedNook/AS_MH_NOOK.png}
+        \caption{Manhattan)}
+    \end{subfigure} \hfill
+    \begin{subfigure}{.45\textwidth}
+        \includegraphics[width=\textwidth]{ModifiedNook/AS_MHNook_NOOK.png}
+        \caption{Manhattan with Nook and Cranny filtering}
+    \end{subfigure} \hfill
+  
+    \caption{A* Nook and Cranny Noise Search Results Visualization}    
+    \label{fig:ModNook}
+\end{figure*}
+
+\begin{figure*}
+    \centering
+     \begin{subfigure}{.30\textwidth}
+        \includegraphics[width=\textwidth]{NoRefine/BDAS_DIJK_HardNoise.png}
+        \caption{Bi-Directional Dijkstra}
+        \label{fig:NR_BDIJK}
+    \end{subfigure} \hfill
+    \begin{subfigure}{.30\textwidth}
+        \includegraphics[width=\textwidth]{HardNoise/BDAS_DIJK_HardNoise.png}
+        \caption{Bi-Directional Dijkstra (Using Refinement)}
+        \label{fig:HN_BDIJK}
+    \end{subfigure} \hfill
+    \begin{subfigure}{.30\textwidth}
+        \includegraphics[width=\textwidth]{HardNoise/AS_DIJK_HardNoise.png}
+        \caption{Dijkstra}
+        \label{fig:HN_DIJK}
+    \end{subfigure} \hfill
+     \begin{subfigure}{.30\textwidth}
+        \includegraphics[width=\textwidth]{NoRefine/BDAS_MH_HardNoise.png}
+        \caption{Bi-Directional Manhattan}
+        \label{fig:NR_BMH}
+    \end{subfigure} \hfill
+    \begin{subfigure}{.30\textwidth}
+        \includegraphics[width=\textwidth]{HardNoise/BDAS_MH_HardNoise.png}
+        \caption{Bi-Directional Manhattan (Using Refinement)}
+        \label{fig:HN_BMH}
+    \end{subfigure} \hfill
+    \begin{subfigure}{.30\textwidth}
+        \includegraphics[width=\textwidth]{HardNoise/AS_MH_HardNoise.png}
+        \caption{Manhattan}
+        \label{fig:HN_MH}
+    \end{subfigure} \hfill
+    \begin{subfigure}{.30\textwidth}
+        \includegraphics[width=\textwidth]{NoRefine/BDAS_SLD_HardNoise.png}
+        \caption{Bi-Directional SLD}
+        \label{fig:NR_BSLD}
+    \end{subfigure} \hfill
+    \begin{subfigure}{.30\textwidth}
+        \includegraphics[width=\textwidth]{HardNoise/BDAS_SLD_HardNoise.png}
+        \caption{Bi-Directional SLD (Using Refinement)}
+        \label{fig:HN_BSLD}
+    \end{subfigure} \hfill
+    \begin{subfigure}{.30\textwidth}
+        \includegraphics[width=\textwidth]{HardNoise/AS_SLD_HardNoise.png}
+        \caption{SLD}
+        \label{fig:HN_SLD}
+    \end{subfigure} \hfill
+  
+    \caption{Large Dense Maze Search Results}    
+    \label{fig:HardNoise}
+\end{figure*}
+
+\begin{figure*}
+    \begin{subfigure}{.48\textwidth}
+        \includegraphics[width=\textwidth]{NonOptimal.png}
+        \caption{Without path correction}
+        \label{fig:NONOP}
+    \end{subfigure} \hfill
+    \begin{subfigure}{.48\textwidth}
+        \includegraphics[width=\textwidth]{Optimal.png}
+        \caption{With path correction}
+        \label{fig:OP}
+    \end{subfigure} \hfill
+    \caption{Non-optimal path correction for inconsistent heuristics}    
+    \label{fig:NonConsistent}
+\end{figure*}
+
+
+
+\end{document}

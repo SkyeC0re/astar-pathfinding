@@ -17,5 +17,3 @@ make - Compile
 make clean - Clean All Output and Class Files
 ./run.sh [Lattice File Name] [Start x] [Start y] [End x] [End y] [Algorithm] [Hueristic] [Output Folder Name] - Run a specific file as a lattice and output the data to a folder.
 ./test.sh - Runs a test suite of simple cases which can be inspected for correctness. The ouput folders are named as [Algorithm]_[Hueristic]_[Maze Name]
-
-Note Large images are contained in the pdf, and as such it seemed like a bad idea to include the entire latex source the report here. The work is available on Overleaf however, using this link: https://www.overleaf.com/read/csxtgbzhpxpt.
